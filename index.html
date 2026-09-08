@@ -96,10 +96,12 @@
     border-radius:var(--radius); padding:14px 16px; margin-bottom:10px; cursor:pointer;
     display:flex; align-items:center; gap:10px;
   }
-  .space-card.dragging{ opacity:0.4; }
-  .space-card[draggable="true"]{ cursor:grab; }
-  .space-card[draggable="true"]:active{ cursor:grabbing; }
-  .space-card .drag-handle{ flex:0 0 auto; color:var(--ink-soft); font-size:16px; line-height:1; letter-spacing:-2px; }
+  .space-card.dragging{ opacity:0.85; box-shadow:0 6px 16px rgba(0,0,0,0.18); }
+  .space-card .drag-handle{
+    flex:0 0 auto; color:var(--ink-soft); font-size:20px; line-height:1; letter-spacing:-2px;
+    padding:10px 6px; margin:-10px -6px; cursor:grab; touch-action:none; user-select:none;
+  }
+  .space-card .drag-handle:active{ cursor:grabbing; }
   .space-card .space-card-body{ flex:1; min-width:0; }
   .space-card h3{ margin:0 0 4px; font-size:16px; }
   .space-card .meta{ font-size:12px; color:var(--ink-soft); display:flex; justify-content:space-between; gap:10px; }
@@ -526,30 +528,84 @@ async function renderHome(){
 }
 
 function wireDragReorder(main, spaces){
+  // Uses Pointer Events (not the HTML5 Drag and Drop API) because native
+  // drag-and-drop only fires from a mouse - touch screens never trigger
+  // dragstart/dragover/drop, so on mobile the finger just scrolls the page.
+  // Move/up listeners are attached to window for the duration of the drag
+  // (rather than relying on setPointerCapture) so the gesture keeps working
+  // even if the finger slides off the small handle element.
+  const CARD_GAP = 10; // must match .space-card margin-bottom
+  const allCards = () => [...main.querySelectorAll('.space-card')];
+
   main.querySelectorAll('.space-card').forEach(card => {
-    card.draggable = true;
-    card.addEventListener('dragstart', e => {
+    const handle = card.querySelector('.drag-handle');
+    if(!handle) return;
+
+    handle.addEventListener('click', e => e.stopPropagation());
+
+    handle.addEventListener('pointerdown', e => {
+      if(e.button !== undefined && e.button !== 0) return;
+      e.preventDefault();
+      const pointerId = e.pointerId;
+      const startY = e.clientY;
+      const cardHeight = card.offsetHeight + CARD_GAP;
+      const originalIndex = allCards().indexOf(card);
+      let currentIndex = originalIndex;
+      let moved = false;
+
       card.classList.add('dragging');
-      e.dataTransfer.effectAllowed = 'move';
-    });
-    card.addEventListener('dragend', () => card.classList.remove('dragging'));
-    card.addEventListener('dragover', e => {
-      e.preventDefault();
-      const dragging = main.querySelector('.dragging');
-      if(!dragging || dragging === card) return;
-      const rect = card.getBoundingClientRect();
-      const before = (e.clientY - rect.top) < rect.height / 2;
-      main.insertBefore(dragging, before ? card : card.nextSibling);
-    });
-    card.addEventListener('drop', async e => {
-      e.preventDefault();
-      const ids = [...main.querySelectorAll('.space-card')].map(c => c.dataset.id);
-      await Promise.all(ids.map((id, i) => {
-        const sp = spaces.find(s => s.id === id);
-        sp.order = i;
-        return dbPut('spaces', sp);
-      }));
-      showToast('Order updated');
+      card.style.position = 'relative';
+      card.style.zIndex = '10';
+      allCards().forEach(c => { if(c !== card) c.style.transition = 'transform .15s ease'; });
+
+      function onMove(ev){
+        if(ev.pointerId !== pointerId) return;
+        const deltaY = ev.clientY - startY;
+        if(Math.abs(deltaY) > 3) moved = true;
+        card.style.transform = `translateY(${deltaY}px)`;
+        const steps = Math.round(deltaY / cardHeight);
+        const newIndex = Math.min(allCards().length - 1, Math.max(0, originalIndex + steps));
+        if(newIndex !== currentIndex){
+          allCards().forEach((c, i) => {
+            if(c === card) return;
+            let shift = 0;
+            if(newIndex > originalIndex && i > originalIndex && i <= newIndex) shift = -1;
+            else if(newIndex < originalIndex && i >= newIndex && i < originalIndex) shift = 1;
+            c.style.transform = shift ? `translateY(${shift * cardHeight}px)` : '';
+          });
+          currentIndex = newIndex;
+        }
+      }
+
+      async function onUp(ev){
+        if(ev.pointerId !== pointerId) return;
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        window.removeEventListener('pointercancel', onUp);
+        card.classList.remove('dragging');
+        card.style.position = '';
+        card.style.zIndex = '';
+        card.style.transform = '';
+
+        const cards = allCards();
+        const draggedId = card.dataset.id;
+        const ids = cards.filter(c => c !== card).map(c => c.dataset.id);
+        ids.splice(currentIndex, 0, draggedId);
+        cards.forEach(c => { c.style.transform = ''; c.style.transition = ''; });
+
+        if(!moved) return;
+        await Promise.all(ids.map((id, i) => {
+          const sp = spaces.find(s => s.id === id);
+          sp.order = i;
+          return dbPut('spaces', sp);
+        }));
+        showToast('Order updated');
+        renderHome();
+      }
+
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onUp);
     });
   });
 }
