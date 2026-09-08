@@ -62,9 +62,20 @@
   /* ---- Filters ---- */
   .filters{
     position:sticky; top:0; z-index:19; background: var(--bg);
-    display:flex; gap:6px; padding:10px 16px; overflow-x:auto; border-bottom:1px solid var(--line);
+    display:flex; flex-direction:column; gap:8px; padding:10px 16px; border-bottom:1px solid var(--line);
   }
-  .filters::-webkit-scrollbar{ display:none; }
+  .search-row{ position:relative; }
+  .search-input{
+    width:100%; border:1px solid var(--line); border-radius:var(--radius); padding:8px 32px 8px 12px;
+    font-family:inherit; font-size:13.5px; background:var(--panel); color:var(--ink); box-sizing:border-box;
+  }
+  .search-input:focus{ outline:none; border-color:var(--accent); }
+  .search-clear{
+    position:absolute; inset-inline-end:6px; top:50%; transform:translateY(-50%);
+    border:none; background:none; color:var(--ink-soft); font-size:16px; line-height:1; cursor:pointer; padding:4px; display:none;
+  }
+  .chip-row{ display:flex; gap:6px; overflow-x:auto; }
+  .chip-row::-webkit-scrollbar{ display:none; }
   .chip{
     flex:0 0 auto; padding:7px 14px; border:1px solid var(--line); background:var(--panel);
     color:var(--ink-soft); font-size:12.5px; font-weight:600; border-radius:99px; cursor:pointer; white-space:nowrap;
@@ -233,10 +244,16 @@
 </header>
 
 <div class="filters" id="filters" style="display:none;">
-  <div class="chip active" data-f="all">All</div>
-  <div class="chip" data-f="notstarted">Not started</div>
-  <div class="chip" data-f="inprogress">In progress</div>
-  <div class="chip" data-f="done">Completed</div>
+  <div class="search-row">
+    <input type="text" class="search-input" id="taskSearch" placeholder="Search tasks...">
+    <button class="search-clear" id="searchClear" title="Clear search">&times;</button>
+  </div>
+  <div class="chip-row">
+    <div class="chip active" data-f="all">All</div>
+    <div class="chip" data-f="notstarted">Not started</div>
+    <div class="chip" data-f="inprogress">In progress</div>
+    <div class="chip" data-f="done">Completed</div>
+  </div>
 </div>
 
 <main id="main"></main>
@@ -306,6 +323,7 @@ let currentSpace = null;   // {id, name, createdAt}
 let tasks = [];
 let photoCache = {};
 let currentFilter = 'all';
+let currentSearch = '';
 let saveTimers = {};
 let modalOnConfirm = null;
 
@@ -409,6 +427,9 @@ async function openSpace(spaceId){
   document.getElementById('addBtn').textContent = '+ Add new task';
   document.getElementById('reportView').classList.remove('open');
   currentFilter = 'all';
+  currentSearch = '';
+  document.getElementById('taskSearch').value = '';
+  document.getElementById('searchClear').style.display = 'none';
   document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.f === 'all'));
   renderSpace();
 }
@@ -461,9 +482,20 @@ function renderSpace(){
   updateProgress();
   const main = document.getElementById('main');
   main.innerHTML = '';
-  const filtered = currentFilter === 'all' ? tasks : tasks.filter(t => t.status === currentFilter);
+  let filtered = currentFilter === 'all' ? tasks : tasks.filter(t => t.status === currentFilter);
+  if(currentSearch){
+    const q = currentSearch;
+    filtered = filtered.filter(t =>
+      (t.task||'').toLowerCase().includes(q) ||
+      (t.category||'').toLowerCase().includes(q) ||
+      (t.prereq||'').toLowerCase().includes(q) ||
+      (t.notes||'').toLowerCase().includes(q)
+    );
+  }
   if(filtered.length === 0){
-    main.innerHTML = '<div class="empty">No tasks in this status.</div>';
+    main.innerHTML = currentSearch
+      ? '<div class="empty">No tasks match your search.</div>'
+      : '<div class="empty">No tasks in this status.</div>';
     return;
   }
   const groups = groupByCategory(filtered);
@@ -587,6 +619,19 @@ document.getElementById('filters').addEventListener('click', e => {
   chip.classList.add('active');
   currentFilter = chip.dataset.f;
   renderSpace();
+});
+document.getElementById('taskSearch').addEventListener('input', e => {
+  currentSearch = e.target.value.trim().toLowerCase();
+  document.getElementById('searchClear').style.display = currentSearch ? 'block' : 'none';
+  renderSpace();
+});
+document.getElementById('searchClear').addEventListener('click', () => {
+  const input = document.getElementById('taskSearch');
+  input.value = '';
+  currentSearch = '';
+  document.getElementById('searchClear').style.display = 'none';
+  renderSpace();
+  input.focus();
 });
 
 document.getElementById('backBtn').addEventListener('click', showHome);
