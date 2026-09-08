@@ -102,6 +102,12 @@
     padding:10px 6px; margin:-10px -6px; cursor:grab; touch-action:none; user-select:none;
   }
   .space-card .drag-handle:active{ cursor:grabbing; }
+  .space-card.selected{ background:#fbe9e0; border-inline-start-color:var(--danger); }
+  .select-circle{
+    flex:0 0 auto; width:22px; height:22px; border-radius:50%; border:2px solid var(--line);
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:900; color:#fff; background:#fff;
+  }
+  .select-circle.checked{ background:var(--danger); border-color:var(--danger); }
   .space-card .space-card-body{ flex:1; min-width:0; }
   .space-card h3{ margin:0 0 4px; font-size:16px; }
   .space-card .meta{ font-size:12px; color:var(--ink-soft); display:flex; justify-content:space-between; gap:10px; }
@@ -171,6 +177,8 @@
   }
   .add-btn:active{ opacity:0.85; }
   .add-btn.secondary{ background:var(--ink); }
+  .add-btn.danger{ background:var(--danger); }
+  .add-btn:disabled{ opacity:0.4; cursor:default; }
 
   .empty{ text-align:center; color:var(--ink-soft); padding:40px 20px; font-size:13.5px; }
 
@@ -266,6 +274,8 @@
     <button class="tool-btn" id="backupBtn">Backup all data (.json)</button>
     <button class="tool-btn" id="restoreBtn">Restore backup</button>
     <input type="file" id="restoreInput" accept=".json,application/json,text/plain" style="display:none;">
+    <button class="tool-btn" id="editSpacesBtn">Edit</button>
+    <button class="tool-btn" id="selectAllBtn" style="display:none;">Select all</button>
   </div>
 </header>
 
@@ -296,6 +306,7 @@
 
 <div class="add-bar" id="addBar">
   <button class="add-btn" id="addBtn">+ Add new space</button>
+  <button class="add-btn danger" id="deleteSelectedBtn" style="display:none;" disabled>Delete</button>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -375,6 +386,8 @@ let saveTimers = {};
 let modalOnConfirm = null;
 let sortMode = localStorage.getItem('spaceSortMode') || 'manual';
 let reportBackTarget = 'checklist';
+let editMode = false;
+let selectedSpaceIds = new Set();
 
 const DEFAULT_TASKS = [
 ["Surface Preparation","Inspect plaster and fix defects (cracks, unevenness)","Plastering fully complete and walls/ceiling dry"],
@@ -454,7 +467,25 @@ function showHome(){
   document.getElementById('homeSort').style.display = 'flex';
   document.querySelectorAll('#homeSort .chip').forEach(c => c.classList.toggle('active', c.dataset.sort === sortMode));
   document.getElementById('homeSortHint').style.display = sortMode === 'manual' ? 'inline' : 'none';
+  editMode = false;
+  selectedSpaceIds = new Set();
+  updateEditUI();
   renderHome();
+}
+
+async function updateEditUI(){
+  document.getElementById('editSpacesBtn').textContent = editMode ? 'Done' : 'Edit';
+  document.getElementById('selectAllBtn').style.display = editMode ? 'inline-block' : 'none';
+  document.getElementById('homeSort').style.display = editMode ? 'none' : 'flex';
+  document.getElementById('addBtn').style.display = editMode ? 'none' : 'block';
+  const delBtn = document.getElementById('deleteSelectedBtn');
+  delBtn.style.display = editMode ? 'block' : 'none';
+  delBtn.disabled = selectedSpaceIds.size === 0;
+  delBtn.textContent = selectedSpaceIds.size ? `Delete (${selectedSpaceIds.size})` : 'Delete';
+  if(editMode){
+    const total = (await dbGetAll('spaces')).length;
+    document.getElementById('selectAllBtn').textContent = (total > 0 && selectedSpaceIds.size === total) ? 'Deselect all' : 'Select all';
+  }
 }
 
 async function openSpace(spaceId){
@@ -510,21 +541,43 @@ async function renderHome(){
     const total = spaceTasks.length;
     const done = spaceTasks.filter(t=>t.status==='done').length;
     const pct = total ? Math.round((done/total)*100) : 0;
+    const isSelected = selectedSpaceIds.has(s.id);
     const card = document.createElement('div');
-    card.className = 'space-card';
+    card.className = 'space-card' + (isSelected ? ' selected' : '');
     card.dataset.id = s.id;
     card.innerHTML = `
-      ${sortMode === 'manual' ? '<span class="drag-handle">&#9776;</span>' : ''}
+      ${editMode ? `<span class="select-circle${isSelected ? ' checked' : ''}">${isSelected ? '&#10003;' : ''}</span>` : ''}
+      ${!editMode && sortMode === 'manual' ? '<span class="drag-handle">&#9776;</span>' : ''}
       <div class="space-card-body">
         <h3>${escapeHtml(s.name)}</h3>
         <div class="meta"><span>${done} of ${total} done</span><span>${pct}%</span></div>
         <div class="mini-bar"><div class="mini-fill" style="width:${pct}%"></div></div>
       </div>
     `;
-    card.addEventListener('click', () => openSpace(s.id));
+    card.addEventListener('click', () => {
+      if(editMode){
+        if(selectedSpaceIds.has(s.id)) selectedSpaceIds.delete(s.id);
+        else selectedSpaceIds.add(s.id);
+        updateEditUI();
+        renderHome();
+      } else {
+        openSpace(s.id);
+      }
+    });
     main.appendChild(card);
   }
-  if(sortMode === 'manual') wireDragReorder(main, spaces);
+  if(!editMode && sortMode === 'manual') wireDragReorder(main, spaces);
+}
+
+async function deleteSpace(spaceId){
+  const spaceTasks = await dbGetAllByIndex('tasks', 'spaceId', spaceId);
+  for(const t of spaceTasks){
+    await dbDelete('tasks', t.id);
+    if(t.hasPhoto) await dbDelete('photos', t.id).catch(()=>{});
+  }
+  const history = await dbGetAllByIndex('reportHistory', 'spaceId', spaceId);
+  for(const h of history) await dbDelete('reportHistory', h.id);
+  await dbDelete('spaces', spaceId);
 }
 
 function wireDragReorder(main, spaces){
@@ -1010,6 +1063,35 @@ document.getElementById('restoreInput').addEventListener('change', e => {
   };
   reader.onerror = () => alert('This file could not be read.');
   reader.readAsText(file);
+});
+
+/* ================= Edit / delete spaces ================= */
+document.getElementById('editSpacesBtn').addEventListener('click', () => {
+  editMode = !editMode;
+  selectedSpaceIds = new Set();
+  updateEditUI();
+  renderHome();
+});
+document.getElementById('selectAllBtn').addEventListener('click', async () => {
+  const spaces = await dbGetAll('spaces');
+  if(selectedSpaceIds.size === spaces.length){
+    selectedSpaceIds = new Set();
+  } else {
+    selectedSpaceIds = new Set(spaces.map(s => s.id));
+  }
+  updateEditUI();
+  renderHome();
+});
+document.getElementById('deleteSelectedBtn').addEventListener('click', async () => {
+  const n = selectedSpaceIds.size;
+  if(n === 0) return;
+  if(!confirm(`Delete ${n} space${n > 1 ? 's' : ''}? This removes all of its tasks, photos, and report history. This cannot be undone.`)) return;
+  for(const id of selectedSpaceIds) await deleteSpace(id);
+  showToast(`${n} space${n > 1 ? 's' : ''} deleted`);
+  editMode = false;
+  selectedSpaceIds = new Set();
+  updateEditUI();
+  renderHome();
 });
 
 /* ================= Init ================= */
