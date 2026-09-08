@@ -265,7 +265,7 @@
   <div class="toolbar" id="homeToolbar">
     <button class="tool-btn" id="backupBtn">Backup all data (.json)</button>
     <button class="tool-btn" id="restoreBtn">Restore backup</button>
-    <input type="file" id="restoreInput" accept="application/json" style="display:none;">
+    <input type="file" id="restoreInput" accept=".json,application/json,text/plain" style="display:none;">
   </div>
 </header>
 
@@ -987,17 +987,28 @@ document.getElementById('restoreInput').addEventListener('change', e => {
   if(!file) return;
   const reader = new FileReader();
   reader.onload = async evt => {
+    let payload;
     try{
-      const payload = JSON.parse(evt.target.result);
-      if(!confirm(`This will add ${payload.spaces.length} space(s) from the backup. Continue?`)) return;
+      payload = JSON.parse(evt.target.result);
+    }catch(err){
+      alert('This file could not be read as a valid backup (not valid JSON).');
+      return;
+    }
+    if(!payload || !Array.isArray(payload.spaces) || !Array.isArray(payload.tasks)){
+      alert('This file does not look like a Site Finishing Tracker backup.');
+      return;
+    }
+    if(!confirm(`This will add ${payload.spaces.length} space(s) from the backup. Continue?`)) return;
+    try{
       for(const s of payload.spaces) await dbPut('spaces', s);
       for(const t of payload.tasks) await dbPut('tasks', t);
-      for(const p of payload.photos) await dbPut('photos', p);
+      for(const p of (payload.photos||[])) await dbPut('photos', p);
       for(const h of (payload.reportHistory||[])) await dbPut('reportHistory', h);
       showToast('Backup restored');
       renderHome();
-    }catch(err){ alert('This file could not be read as a valid backup.'); }
+    }catch(err){ alert('Restore failed while saving data: ' + err.message); }
   };
+  reader.onerror = () => alert('This file could not be read.');
   reader.readAsText(file);
 });
 
