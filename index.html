@@ -85,10 +85,22 @@
   main{ padding: 14px 14px 100px; max-width:760px; margin:0 auto; }
 
   /* ---- Home / space list ---- */
+  .home-sort{
+    position:sticky; top:0; z-index:19; background: var(--bg);
+    display:flex; align-items:center; gap:10px; padding:10px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap;
+  }
+  .home-sort-label{ font-size:12px; color:var(--ink-soft); font-weight:600; flex:0 0 auto; }
+  .home-sort-hint{ font-size:11.5px; color:var(--ink-soft); font-style:italic; flex:0 0 auto; }
   .space-card{
     background:var(--panel); border:1px solid var(--line); border-inline-start:5px solid var(--accent);
     border-radius:var(--radius); padding:14px 16px; margin-bottom:10px; cursor:pointer;
+    display:flex; align-items:center; gap:10px;
   }
+  .space-card.dragging{ opacity:0.4; }
+  .space-card[draggable="true"]{ cursor:grab; }
+  .space-card[draggable="true"]:active{ cursor:grabbing; }
+  .space-card .drag-handle{ flex:0 0 auto; color:var(--ink-soft); font-size:16px; line-height:1; letter-spacing:-2px; }
+  .space-card .space-card-body{ flex:1; min-width:0; }
   .space-card h3{ margin:0 0 4px; font-size:16px; }
   .space-card .meta{ font-size:12px; color:var(--ink-soft); display:flex; justify-content:space-between; gap:10px; }
   .space-card .mini-bar{ height:5px; background:var(--line); border-radius:99px; margin-top:8px; overflow:hidden;}
@@ -182,8 +194,19 @@
   .modal-actions .cancel{ background:#e2ddd0; color:var(--ink); }
 
   /* ---- Report view ---- */
-  #reportView{ display:none; background:#fff; }
-  #reportView.open{ display:block; position:fixed; inset:0; z-index:55; overflow:auto; }
+  #reportView, #historyView{ display:none; background:#fff; }
+  #reportView.open, #historyView.open{ display:block; position:fixed; inset:0; z-index:55; overflow:auto; }
+  .history-item{
+    display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;
+    padding:14px 0; border-bottom:1px solid #eee;
+  }
+  .history-date{ font-weight:700; font-size:14px; }
+  .history-meta{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+  .history-view-btn{
+    border:1px solid var(--line); background:var(--panel); padding:7px 14px; border-radius:var(--radius);
+    cursor:pointer; font-size:12.5px; font-weight:600;
+  }
+  .history-view-btn:hover{ border-color:var(--accent); color:var(--accent); }
   .report-page{ max-width:760px; margin:0 auto; padding:30px 24px 80px; }
   .report-header{ border-bottom:3px solid var(--ink); padding-bottom:14px; margin-bottom:18px; }
   .report-header h1{ font-size:22px; margin:0 0 4px; }
@@ -233,6 +256,7 @@
   <div class="toolbar" id="spaceToolbar" style="display:none;">
     <button class="tool-btn" id="exportExcelBtn">Export Excel</button>
     <button class="tool-btn" id="reportBtn">Generate report</button>
+    <button class="tool-btn" id="historyBtn">Report history</button>
     <button class="tool-btn" id="reportDateBtn">Report date</button>
     <button class="tool-btn" id="renameSpaceBtn">Rename space</button>
   </div>
@@ -242,6 +266,16 @@
     <input type="file" id="restoreInput" accept="application/json" style="display:none;">
   </div>
 </header>
+
+<div class="home-sort" id="homeSort" style="display:none;">
+  <span class="home-sort-label">Sort:</span>
+  <div class="chip-row">
+    <div class="chip active" data-sort="manual">Manual</div>
+    <div class="chip" data-sort="name">Name</div>
+    <div class="chip" data-sort="reportDate">Report date</div>
+  </div>
+  <span class="home-sort-hint" id="homeSortHint">Drag &#9776; to reorder</span>
+</div>
 
 <div class="filters" id="filters" style="display:none;">
   <div class="search-row">
@@ -287,10 +321,17 @@
   <div class="report-page" id="reportContent"></div>
 </div>
 
+<div id="historyView">
+  <div class="report-toolbar">
+    <button id="historyBack">&larr; Back to checklist</button>
+  </div>
+  <div class="report-page" id="historyList"></div>
+</div>
+
 <script>
 /* ================= IndexedDB layer ================= */
 const DB_NAME = 'siteTrackerDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 let db;
 
 function openDB(){
@@ -304,6 +345,10 @@ function openDB(){
         s.createIndex('spaceId', 'spaceId', { unique:false });
       }
       if(!d.objectStoreNames.contains('photos')) d.createObjectStore('photos', { keyPath: 'taskId' });
+      if(!d.objectStoreNames.contains('reportHistory')){
+        const h = d.createObjectStore('reportHistory', { keyPath: 'id' });
+        h.createIndex('spaceId', 'spaceId', { unique:false });
+      }
     };
     req.onsuccess = e => { db = e.target.result; resolve(db); };
     req.onerror = e => reject(e.target.error);
@@ -326,6 +371,8 @@ let currentFilter = 'all';
 let currentSearch = '';
 let saveTimers = {};
 let modalOnConfirm = null;
+let sortMode = localStorage.getItem('spaceSortMode') || 'manual';
+let reportBackTarget = 'checklist';
 
 const DEFAULT_TASKS = [
 ["Surface Preparation","Inspect plaster and fix defects (cracks, unevenness)","Plastering fully complete and walls/ceiling dry"],
@@ -401,6 +448,10 @@ function showHome(){
   document.getElementById('filters').style.display = 'none';
   document.getElementById('addBtn').textContent = '+ Add new space';
   document.getElementById('reportView').classList.remove('open');
+  document.getElementById('historyView').classList.remove('open');
+  document.getElementById('homeSort').style.display = 'flex';
+  document.querySelectorAll('#homeSort .chip').forEach(c => c.classList.toggle('active', c.dataset.sort === sortMode));
+  document.getElementById('homeSortHint').style.display = sortMode === 'manual' ? 'inline' : 'none';
   renderHome();
 }
 
@@ -426,6 +477,8 @@ async function openSpace(spaceId){
   document.getElementById('filters').style.display = 'flex';
   document.getElementById('addBtn').textContent = '+ Add new task';
   document.getElementById('reportView').classList.remove('open');
+  document.getElementById('historyView').classList.remove('open');
+  document.getElementById('homeSort').style.display = 'none';
   currentFilter = 'all';
   currentSearch = '';
   document.getElementById('taskSearch').value = '';
@@ -443,7 +496,13 @@ async function renderHome(){
     main.innerHTML = '<div class="empty">No spaces yet. Tap "+ Add new space" to create your first one (e.g. a room, unit, or floor).</div>';
     return;
   }
-  spaces.sort((a,b) => a.name.localeCompare(b.name));
+  if(sortMode === 'name'){
+    spaces.sort((a,b) => a.name.localeCompare(b.name));
+  } else if(sortMode === 'reportDate'){
+    spaces.sort((a,b) => (b.reportDate||'').localeCompare(a.reportDate||''));
+  } else {
+    spaces.sort((a,b) => (a.order ?? a.createdAt ?? 0) - (b.order ?? b.createdAt ?? 0));
+  }
   for(const s of spaces){
     const spaceTasks = await dbGetAllByIndex('tasks', 'spaceId', s.id);
     const total = spaceTasks.length;
@@ -451,14 +510,48 @@ async function renderHome(){
     const pct = total ? Math.round((done/total)*100) : 0;
     const card = document.createElement('div');
     card.className = 'space-card';
+    card.dataset.id = s.id;
     card.innerHTML = `
-      <h3>${escapeHtml(s.name)}</h3>
-      <div class="meta"><span>${done} of ${total} done</span><span>${pct}%</span></div>
-      <div class="mini-bar"><div class="mini-fill" style="width:${pct}%"></div></div>
+      ${sortMode === 'manual' ? '<span class="drag-handle">&#9776;</span>' : ''}
+      <div class="space-card-body">
+        <h3>${escapeHtml(s.name)}</h3>
+        <div class="meta"><span>${done} of ${total} done</span><span>${pct}%</span></div>
+        <div class="mini-bar"><div class="mini-fill" style="width:${pct}%"></div></div>
+      </div>
     `;
     card.addEventListener('click', () => openSpace(s.id));
     main.appendChild(card);
   }
+  if(sortMode === 'manual') wireDragReorder(main, spaces);
+}
+
+function wireDragReorder(main, spaces){
+  main.querySelectorAll('.space-card').forEach(card => {
+    card.draggable = true;
+    card.addEventListener('dragstart', e => {
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+    card.addEventListener('dragover', e => {
+      e.preventDefault();
+      const dragging = main.querySelector('.dragging');
+      if(!dragging || dragging === card) return;
+      const rect = card.getBoundingClientRect();
+      const before = (e.clientY - rect.top) < rect.height / 2;
+      main.insertBefore(dragging, before ? card : card.nextSibling);
+    });
+    card.addEventListener('drop', async e => {
+      e.preventDefault();
+      const ids = [...main.querySelectorAll('.space-card')].map(c => c.dataset.id);
+      await Promise.all(ids.map((id, i) => {
+        const sp = spaces.find(s => s.id === id);
+        sp.order = i;
+        return dbPut('spaces', sp);
+      }));
+      showToast('Order updated');
+    });
+  });
 }
 
 /* ================= Space checklist ================= */
@@ -612,6 +705,16 @@ function openLightbox(src){
 document.getElementById('lbClose').addEventListener('click', () => document.getElementById('lightbox').classList.remove('open'));
 document.getElementById('lightbox').addEventListener('click', e => { if(e.target.id === 'lightbox') document.getElementById('lightbox').classList.remove('open'); });
 
+document.getElementById('homeSort').addEventListener('click', e => {
+  const chip = e.target.closest('.chip');
+  if(!chip) return;
+  document.querySelectorAll('#homeSort .chip').forEach(c => c.classList.remove('active'));
+  chip.classList.add('active');
+  sortMode = chip.dataset.sort;
+  localStorage.setItem('spaceSortMode', sortMode);
+  document.getElementById('homeSortHint').style.display = sortMode === 'manual' ? 'inline' : 'none';
+  renderHome();
+});
 document.getElementById('filters').addEventListener('click', e => {
   const chip = e.target.closest('.chip');
   if(!chip) return;
@@ -641,7 +744,7 @@ document.getElementById('addBtn').addEventListener('click', () => {
   if(!currentSpace){
     openModal('New space', '', async name => {
       if(!name) return;
-      const space = { id: uid(), name, createdAt: Date.now(), reportDate: todayStr() };
+      const space = { id: uid(), name, createdAt: Date.now(), order: Date.now(), reportDate: todayStr() };
       await dbPut('spaces', space);
       for(const [category, task, prereq] of DEFAULT_TASKS){
         await dbPut('tasks', { id: uid(), spaceId: space.id, category, task, prereq, status:'notstarted', notes:'', startDate:'', endDate:'', hasPhoto:false });
@@ -714,7 +817,16 @@ document.getElementById('exportExcelBtn').addEventListener('click', () => {
 });
 
 /* ================= Printable report ================= */
-document.getElementById('reportBtn').addEventListener('click', () => {
+async function saveReportSnapshot(html){
+  const existing = await dbGetAllByIndex('reportHistory', 'spaceId', currentSpace.id);
+  const match = existing.find(h => h.reportDate === currentSpace.reportDate);
+  const entry = match || { id: uid(), spaceId: currentSpace.id, reportDate: currentSpace.reportDate };
+  entry.html = html;
+  entry.generatedAt = Date.now();
+  await dbPut('reportHistory', entry);
+}
+
+document.getElementById('reportBtn').addEventListener('click', async () => {
   const total = tasks.length;
   const done = tasks.filter(t=>t.status==='done').length;
   const inprog = tasks.filter(t=>t.status==='inprogress').length;
@@ -746,19 +858,64 @@ document.getElementById('reportBtn').addEventListener('click', () => {
       </div>`;
     });
   });
+  await saveReportSnapshot(html);
   document.getElementById('reportContent').innerHTML = html;
+  reportBackTarget = 'checklist';
+  document.getElementById('reportBack').textContent = '← Back to checklist';
   document.getElementById('reportView').classList.add('open');
   window.scrollTo(0,0);
 });
-document.getElementById('reportBack').addEventListener('click', () => document.getElementById('reportView').classList.remove('open'));
+document.getElementById('reportBack').addEventListener('click', () => {
+  document.getElementById('reportView').classList.remove('open');
+  if(reportBackTarget === 'history') document.getElementById('historyView').classList.add('open');
+  reportBackTarget = 'checklist';
+});
 document.getElementById('reportPrint').addEventListener('click', () => window.print());
+
+/* ================= Report history ================= */
+document.getElementById('historyBtn').addEventListener('click', async () => {
+  const entries = await dbGetAllByIndex('reportHistory', 'spaceId', currentSpace.id);
+  entries.sort((a,b) => (b.reportDate||'').localeCompare(a.reportDate||'') || b.generatedAt - a.generatedAt);
+  const list = document.getElementById('historyList');
+  if(entries.length === 0){
+    list.innerHTML = `<h1 style="font-size:20px;margin:0 0 6px;">${escapeHtml(currentSpace.name)} &mdash; Report History</h1>
+      <div class="empty">No saved reports yet. Tap "Generate report" to create and save one.</div>`;
+  } else {
+    list.innerHTML = `<h1 style="font-size:20px;margin:0 0 14px;">${escapeHtml(currentSpace.name)} &mdash; Report History</h1>` +
+      entries.map(en => `
+        <div class="history-item">
+          <div>
+            <div class="history-date">${formatDate(en.reportDate)}</div>
+            <div class="history-meta">Saved ${new Date(en.generatedAt).toLocaleString()}</div>
+          </div>
+          <button class="history-view-btn" data-id="${en.id}">View report</button>
+        </div>
+      `).join('');
+  }
+  document.getElementById('historyView').classList.add('open');
+  window.scrollTo(0,0);
+});
+document.getElementById('historyList').addEventListener('click', async e => {
+  const btn = e.target.closest('.history-view-btn');
+  if(!btn) return;
+  const entry = await dbGet('reportHistory', btn.dataset.id);
+  if(!entry) return;
+  document.getElementById('reportContent').innerHTML = entry.html;
+  reportBackTarget = 'history';
+  document.getElementById('reportBack').textContent = '← Back to history';
+  document.getElementById('historyView').classList.remove('open');
+  document.getElementById('reportView').classList.add('open');
+  window.scrollTo(0,0);
+});
+document.getElementById('historyBack').addEventListener('click', () => document.getElementById('historyView').classList.remove('open'));
 
 /* ================= Backup / restore all data ================= */
 document.getElementById('backupBtn').addEventListener('click', async () => {
   const spaces = await dbGetAll('spaces');
   const allTasks = await dbGetAll('tasks');
   const allPhotos = await dbGetAll('photos');
-  const payload = { version:1, exportedAt: new Date().toISOString(), spaces, tasks: allTasks, photos: allPhotos };
+  const allHistory = await dbGetAll('reportHistory');
+  const payload = { version:2, exportedAt: new Date().toISOString(), spaces, tasks: allTasks, photos: allPhotos, reportHistory: allHistory };
   const blob = new Blob([JSON.stringify(payload)], { type:'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -780,6 +937,7 @@ document.getElementById('restoreInput').addEventListener('change', e => {
       for(const s of payload.spaces) await dbPut('spaces', s);
       for(const t of payload.tasks) await dbPut('tasks', t);
       for(const p of payload.photos) await dbPut('photos', p);
+      for(const h of (payload.reportHistory||[])) await dbPut('reportHistory', h);
       showToast('Backup restored');
       renderHome();
     }catch(err){ alert('This file could not be read as a valid backup.'); }
