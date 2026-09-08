@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Site Finishing Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg: #eae6dc;
+    --panel: #f6f3ea;
+    --ink: #211d18;
+    --ink-soft: #6b6357;
+    --line: #cfc6b2;
+    --accent: #d9541c;
+    --amber: #e2a100;
+    --green: #4c7a3d;
+    --stone: #9a9080;
+    --danger: #b23a2e;
+    --radius: 3px;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:'Archivo', Arial, sans-serif; font-size:15px; line-height:1.6;
+    -webkit-tap-highlight-color: transparent;
+  }
+  ::selection{ background: var(--accent); color:#fff; }
+  button{ font-family:inherit; }
+
+  /* ---- Header ---- */
+  header.top{
+    background: var(--ink); color:#f2ede0; padding: 16px 16px 14px;
+    position: sticky; top:0; z-index:20; border-bottom: 4px solid var(--accent);
+  }
+  .top-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .top-left{ display:flex; align-items:center; gap:10px; min-width:0; }
+  .back-btn{
+    border:1px solid #4a453a; background:transparent; color:#f2ede0; border-radius:var(--radius);
+    padding:7px 10px; font-size:13px; cursor:pointer; flex:0 0 auto;
+  }
+  header.top h1{ font-size:17px; font-weight:800; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  header.top .sub{ font-size:12px; color:#c9c0ac; margin:2px 0 0; }
+  .progress-wrap{ min-width:100px; text-align:right; flex:0 0 auto; }
+  .progress-num{ font-size:20px; font-weight:900; color:#fff; line-height:1; }
+  .progress-label{ font-size:10.5px; color:#c9c0ac; margin-top:2px;}
+  .bar-track{ margin-top:10px; height:7px; background:#3a352c; border-radius:99px; overflow:hidden; }
+  .bar-fill{ height:100%; background: var(--accent); width:0%; transition: width .35s ease; }
+
+  .toolbar{
+    display:flex; gap:6px; margin-top:10px; flex-wrap:wrap;
+  }
+  .tool-btn{
+    border:1px solid #4a453a; background:#2b271f; color:#f2ede0; font-size:12px; font-weight:600;
+    padding:7px 11px; border-radius:var(--radius); cursor:pointer;
+  }
+  .tool-btn:hover{ border-color: var(--accent); }
+
+  /* ---- Filters ---- */
+  .filters{
+    position:sticky; top:0; z-index:19; background: var(--bg);
+    display:flex; gap:6px; padding:10px 16px; overflow-x:auto; border-bottom:1px solid var(--line);
+  }
+  .filters::-webkit-scrollbar{ display:none; }
+  .chip{
+    flex:0 0 auto; padding:7px 14px; border:1px solid var(--line); background:var(--panel);
+    color:var(--ink-soft); font-size:12.5px; font-weight:600; border-radius:99px; cursor:pointer; white-space:nowrap;
+  }
+  .chip.active{ background: var(--ink); border-color:var(--ink); color:#fff; }
+
+  main{ padding: 14px 14px 100px; max-width:760px; margin:0 auto; }
+
+  /* ---- Home / space list ---- */
+  .space-card{
+    background:var(--panel); border:1px solid var(--line); border-inline-start:5px solid var(--accent);
+    border-radius:var(--radius); padding:14px 16px; margin-bottom:10px; cursor:pointer;
+  }
+  .space-card h3{ margin:0 0 4px; font-size:16px; }
+  .space-card .meta{ font-size:12px; color:var(--ink-soft); display:flex; justify-content:space-between; gap:10px; }
+  .space-card .mini-bar{ height:5px; background:var(--line); border-radius:99px; margin-top:8px; overflow:hidden;}
+  .space-card .mini-fill{ height:100%; background:var(--green); }
+
+  .cat-heading{
+    font-size:13px; font-weight:700; color:var(--ink-soft); margin: 22px 4px 8px; padding-bottom:6px;
+    border-bottom:2px solid var(--line); display:flex; justify-content:space-between; align-items:center;
+  }
+  .cat-heading:first-child{ margin-top:4px; }
+  .cat-count{ font-weight:500; color:var(--stone); }
+
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-inline-start: 5px solid var(--stone);
+    border-radius: var(--radius); padding: 12px 14px; margin-bottom:10px;
+  }
+  .card.status-inprogress{ border-inline-start-color: var(--amber); }
+  .card.status-done{ border-inline-start-color: var(--green); }
+
+  .card-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .task-title{
+    font-weight:700; font-size:15px; flex:1; background:transparent; border:none; color:var(--ink);
+    font-family:inherit; resize:none; width:100%; padding:0; outline:none;
+  }
+  .del-btn{ border:none; background:transparent; color:var(--stone); font-size:16px; cursor:pointer; padding:2px 4px; line-height:1; }
+  .del-btn:hover{ color:var(--danger); }
+
+  .field-label{ font-size:11px; color:var(--ink-soft); margin: 8px 0 3px; display:block; }
+  .prereq-input, .notes-input, .cat-select{
+    width:100%; border:1px solid var(--line); background:#fff; border-radius:var(--radius);
+    padding:7px 9px; font-family:inherit; font-size:13px; color:var(--ink); outline:none;
+  }
+  .prereq-input, .cat-select{ resize:none; }
+  .notes-input{ resize:vertical; min-height:44px; }
+  .prereq-input:focus, .notes-input:focus, .task-title:focus, .cat-select:focus{ border-color: var(--accent); }
+
+  .status-row{ display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .status-btn{
+    flex:1; min-width:90px; padding:8px 6px; text-align:center; font-size:12px; font-weight:700;
+    border:1px solid var(--line); background:#fff; color:var(--ink-soft); cursor:pointer; border-radius: var(--radius);
+  }
+  .status-btn[data-s="notstarted"].sel{ background: var(--stone); color:#fff; border-color:var(--stone); }
+  .status-btn[data-s="inprogress"].sel{ background: var(--amber); color:#231c04; border-color:var(--amber); }
+  .status-btn[data-s="done"].sel{ background: var(--green); color:#fff; border-color:var(--green); }
+
+  .date-row{ display:flex; gap:8px; margin-top:10px; }
+  .date-field{ flex:1; }
+  .date-field input{
+    width:100%; border:1px solid var(--line); background:#fff; border-radius:var(--radius);
+    padding:6px 8px; font-family:inherit; font-size:12.5px; color:var(--ink);
+  }
+
+  .photo-row{ margin-top:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .photo-thumb{ width:64px; height:64px; object-fit:cover; border-radius:var(--radius); border:1px solid var(--line); cursor:pointer; }
+  .photo-btn{
+    display:inline-flex; align-items:center; gap:6px; border:1px dashed var(--line); background:#fff;
+    color:var(--ink-soft); font-size:12px; padding:8px 12px; border-radius:var(--radius); cursor:pointer;
+  }
+  .photo-btn:hover{ border-color: var(--accent); color:var(--accent); }
+  input[type=file]{ display:none; }
+
+  .add-bar{ position:fixed; bottom:0; right:0; left:0; padding:12px 16px; background:linear-gradient(to top, var(--bg) 60%, transparent); }
+  .add-btn{
+    max-width:760px; margin:0 auto; display:block; width:100%; background: var(--accent); color:#fff; border:none;
+    padding:13px; font-size:14.5px; font-weight:800; border-radius: var(--radius); cursor:pointer;
+  }
+  .add-btn:active{ opacity:0.85; }
+  .add-btn.secondary{ background:var(--ink); }
+
+  .empty{ text-align:center; color:var(--ink-soft); padding:40px 20px; font-size:13.5px; }
+
+  .toast{
+    position:fixed; bottom:74px; left:50%; transform:translateX(-50%); background: var(--ink); color:#fff;
+    padding:9px 18px; border-radius:99px; font-size:12.5px; opacity:0; pointer-events:none; transition:opacity .25s ease; z-index:40;
+  }
+  .toast.show{ opacity:1; }
+
+  .lightbox{ position:fixed; inset:0; background:rgba(20,17,12,0.9); display:none; align-items:center; justify-content:center; z-index:50; padding:20px; }
+  .lightbox.open{ display:flex; }
+  .lightbox img{ max-width:100%; max-height:85vh; border-radius:4px; }
+  .lightbox .close{ position:absolute; top:16px; left:16px; color:#fff; font-size:26px; background:none; border:none; cursor:pointer;}
+
+  .modal-overlay{ position:fixed; inset:0; background:rgba(20,17,12,0.55); display:none; align-items:center; justify-content:center; z-index:60; padding:20px; }
+  .modal-overlay.open{ display:flex; }
+  .modal{ background:var(--panel); border-radius:6px; padding:20px; max-width:380px; width:100%; }
+  .modal h3{ margin:0 0 12px; font-size:16px; }
+  .modal input{ width:100%; border:1px solid var(--line); border-radius:var(--radius); padding:9px 10px; font-family:inherit; font-size:14px; }
+  .modal-actions{ display:flex; gap:8px; margin-top:14px; }
+  .modal-actions button{ flex:1; padding:10px; border-radius:var(--radius); border:none; font-weight:700; cursor:pointer; }
+  .modal-actions .confirm{ background:var(--accent); color:#fff; }
+  .modal-actions .cancel{ background:#e2ddd0; color:var(--ink); }
+
+  /* ---- Report view ---- */
+  #reportView{ display:none; background:#fff; }
+  #reportView.open{ display:block; }
+  .report-page{ max-width:760px; margin:0 auto; padding:30px 24px 80px; }
+  .report-header{ border-bottom:3px solid var(--ink); padding-bottom:14px; margin-bottom:18px; }
+  .report-header h1{ font-size:22px; margin:0 0 4px; }
+  .report-header .meta{ font-size:12.5px; color:var(--ink-soft); }
+  .report-summary{ display:flex; gap:18px; margin:14px 0 22px; font-size:13px; }
+  .report-cat{ font-size:14px; font-weight:800; margin:22px 0 10px; border-bottom:1px solid var(--line); padding-bottom:6px; }
+  .report-item{ margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid #eee; }
+  .report-item .rt-title{ font-weight:700; font-size:14px; }
+  .report-badge{
+    display:inline-block; font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px; margin-inline-start:8px;
+    color:#fff; vertical-align:middle;
+  }
+  .rb-notstarted{ background:var(--stone); } .rb-inprogress{ background:var(--amber); color:#231c04; } .rb-done{ background:var(--green); }
+  .report-item .rt-line{ font-size:12.5px; color:var(--ink-soft); margin-top:3px; }
+  .report-item img{ max-width:260px; max-height:200px; margin-top:8px; border-radius:4px; border:1px solid var(--line); display:block; }
+  .report-toolbar{
+    position:sticky; top:0; background:#fff; border-bottom:1px solid var(--line); padding:10px 16px;
+    display:flex; gap:8px; justify-content:center; z-index:5;
+  }
+  .report-toolbar button{ border:1px solid var(--line); background:var(--panel); padding:8px 14px; border-radius:var(--radius); cursor:pointer; font-size:13px; font-weight:600; }
+  .report-toolbar button.primary{ background:var(--accent); color:#fff; border-color:var(--accent); }
+  @media print{
+    .report-toolbar{ display:none; }
+    body *{ visibility:hidden; }
+    #reportView, #reportView *{ visibility:visible; }
+    #reportView{ position:absolute; inset:0; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top" id="mainHeader">
+  <div class="top-row">
+    <div class="top-left">
+      <button class="back-btn" id="backBtn" style="display:none;">&larr; Spaces</button>
+      <div>
+        <h1 id="headerTitle">Site Finishing Tracker</h1>
+        <p class="sub" id="headerSub">Select or create a space to begin</p>
+      </div>
+    </div>
+    <div class="progress-wrap" id="progressWrap" style="display:none;">
+      <div class="progress-num" id="progressNum">0%</div>
+      <div class="progress-label" id="progressLabel">0 of 0 done</div>
+    </div>
+  </div>
+  <div class="bar-track" id="barTrack" style="display:none;"><div class="bar-fill" id="barFill"></div></div>
+  <div class="toolbar" id="spaceToolbar" style="display:none;">
+    <button class="tool-btn" id="exportExcelBtn">Export Excel</button>
+    <button class="tool-btn" id="reportBtn">Generate report</button>
+    <button class="tool-btn" id="reportDateBtn">Report date</button>
+    <button class="tool-btn" id="renameSpaceBtn">Rename space</button>
+  </div>
+  <div class="toolbar" id="homeToolbar">
+    <button class="tool-btn" id="backupBtn">Backup all data (.json)</button>
+    <button class="tool-btn" id="restoreBtn">Restore backup</button>
+    <input type="file" id="restoreInput" accept="application/json" style="display:none;">
+  </div>
+</header>
+
+<div class="filters" id="filters" style="display:none;">
+  <div class="chip active" data-f="all">All</div>
+  <div class="chip" data-f="notstarted">Not started</div>
+  <div class="chip" data-f="inprogress">In progress</div>
+  <div class="chip" data-f="done">Completed</div>
+</div>
+
+<main id="main"></main>
+
+<div class="add-bar" id="addBar">
+  <button class="add-btn" id="addBtn">+ Add new space</button>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="lightbox" id="lightbox">
+  <button class="close" id="lbClose">&times;</button>
+  <img id="lbImg" src="" alt="">
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h3 id="modalTitle">New space</h3>
+    <input type="text" id="modalInput" placeholder="e.g. Unit 3 - Kitchen">
+    <div class="modal-actions">
+      <button class="cancel" id="modalCancel">Cancel</button>
+      <button class="confirm" id="modalConfirm">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="reportView">
+  <div class="report-toolbar">
+    <button id="reportBack">&larr; Back to checklist</button>
+    <button class="primary" id="reportPrint">Print / Save as PDF</button>
+  </div>
+  <div class="report-page" id="reportContent"></div>
+</div>
+
+<script>
+/* ================= IndexedDB layer ================= */
+const DB_NAME = 'siteTrackerDB';
+const DB_VERSION = 1;
+let db;
+
+function openDB(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = e => {
+      const d = e.target.result;
+      if(!d.objectStoreNames.contains('spaces')) d.createObjectStore('spaces', { keyPath: 'id' });
+      if(!d.objectStoreNames.contains('tasks')){
+        const s = d.createObjectStore('tasks', { keyPath: 'id' });
+        s.createIndex('spaceId', 'spaceId', { unique:false });
+      }
+      if(!d.objectStoreNames.contains('photos')) d.createObjectStore('photos', { keyPath: 'taskId' });
+    };
+    req.onsuccess = e => { db = e.target.result; resolve(db); };
+    req.onerror = e => reject(e.target.error);
+  });
+}
+function tx(store, mode){ return db.transaction(store, mode).objectStore(store); }
+function reqToPromise(req){ return new Promise((res, rej) => { req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+function dbGetAll(store){ return reqToPromise(tx(store,'readonly').getAll()); }
+function dbGetAllByIndex(store, index, key){ return reqToPromise(tx(store,'readonly').index(index).getAll(key)); }
+function dbGet(store, key){ return reqToPromise(tx(store,'readonly').get(key)); }
+function dbPut(store, val){ return reqToPromise(tx(store,'readwrite').put(val)); }
+function dbDelete(store, key){ return reqToPromise(tx(store,'readwrite').delete(key)); }
+
+/* ================= App state ================= */
+const STATUS = { notstarted: 'Not started', inprogress: 'In progress', done: 'Completed' };
+let currentSpace = null;   // {id, name, createdAt}
+let tasks = [];
+let photoCache = {};
+let currentFilter = 'all';
+let saveTimers = {};
+let modalOnConfirm = null;
+
+const DEFAULT_TASKS = [
+["Surface Preparation","Inspect plaster and fix defects (cracks, unevenness)","Plastering fully complete and walls/ceiling dry"],
+["Surface Preparation","Final edge and joint touch-up on plastered walls","Plaster defect inspection complete"],
+["Tiling & Ceramics","Kitchen wall tiling","Rough plumbing (stub-outs) installed and wall prepped"],
+["Tiling & Ceramics","Bathroom and WC wall tiling","Rough plumbing and waterproofing membrane on floor"],
+["Tiling & Ceramics","Floor tiling / ceramics in rooms and corridors","Floor leveling and concrete screed complete"],
+["Tiling & Ceramics","Tile grouting (kitchen, bathrooms, floors)","Tile adhesive fully cured (24-48h after tiling)"],
+["Tiling & Ceramics","Silicone sealing at wet-area joints (tub, sink, countertop)","Grouting complete and fully cured"],
+["Stone Work","Staircase and landing stone work","Structural work and stair concrete complete"],
+["Stone Work","Door and window sill / threshold stone","Door and window frames installed"],
+["Flooring","Parquet / laminate flooring installation","Floor fully dry and wall painting complete"],
+["Flooring","Skirting / baseboard installation","Flooring and wall painting complete"],
+["Drywall & False Ceiling","Gypsum board false ceiling (recessed lighting, spotlights)","Ceiling electrical wiring complete"],
+["Drywall & False Ceiling","Gypsum board partition walls (if required)","Interior partition layout finalized"],
+["Doors & Windows","Install interior door frames / jambs","Plastering and wall preparation complete"],
+["Doors & Windows","Install interior doors","Door frames installed"],
+["Doors & Windows","Install main entrance security door","Entrance door frame installed"],
+["Doors & Windows","Install windows and glazing (UPVC / aluminum)","Exterior facade finishing complete"],
+["Painting","Wall and ceiling filler / putty application","Wall joints finished and plaster dry"],
+["Painting","Primer coat on walls and ceilings","Filler applied and sanded"],
+["Painting","Final top coat on walls and ceilings","Primer coat complete"],
+["Painting","Painting doors and frames","Doors installed"],
+["Electrical","Final-fix electrical: switches and outlets","Rough electrical wiring and wall painting complete"],
+["Electrical","Install ceiling light fixtures","False ceiling and painting complete"],
+["Electrical","Install distribution panel and unit meter","Wiring complete and inspector approval"],
+["Mechanical (Plumbing & HVAC)","Final-fix plumbing and faucet installation","Rough plumbing and tiling complete"],
+["Mechanical (Plumbing & HVAC)","Install kitchen sink and bathroom basin","Cabinets and countertop installed"],
+["Mechanical (Plumbing & HVAC)","Install toilet and bathroom fixtures","Bathroom tiling and plumbing complete"],
+["Mechanical (Plumbing & HVAC)","Install boiler/heater and radiators","Heating pipework and painting complete"],
+["Mechanical (Plumbing & HVAC)","Install split AC / cooling units","Refrigerant line and outdoor unit location prepared"],
+["Cabinetry & Millwork","Install kitchen cabinets","Kitchen tiling and painting complete"],
+["Cabinetry & Millwork","Install kitchen countertop (stone / quartz)","Cabinet carcasses installed"],
+["Cabinetry & Millwork","Install wardrobes and MDF built-ins","Room painting complete"],
+["Miscellaneous Finishing","Install railings and balustrades (balcony, staircase)","Stone work on stairs/balcony complete"],
+["Miscellaneous Finishing","Install mirrors and bathroom vanity stone","Bathroom tiling complete"],
+["Miscellaneous Finishing","Install electric shutters / curtain tracks","Windows installed"],
+["Miscellaneous Finishing","Install video intercom and security cameras","Related wiring done during electrical final-fix"],
+["Cleaning & Handover","Rough clean (after all construction work)","All above works complete"],
+["Cleaning & Handover","Snag list / defect rectification","Joint inspection with supervisor / client"],
+["Cleaning & Handover","Final detailed cleaning","Snag list items resolved"],
+["Cleaning & Handover","Provisional handover to client / owner","Final cleaning and quality approval"],
+["Cleaning & Handover","Final handover and warranty documentation","Provisional handover issues resolved"]
+];
+
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+function formatDate(d){
+  if(!d) return '';
+  const dt = new Date(d + 'T00:00:00');
+  if(isNaN(dt)) return d;
+  return dt.toLocaleDateString(undefined, { year:'numeric', month:'long', day:'numeric' });
+}
+
+function uid(){ return 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=> t.classList.remove('show'), 1500);
+}
+
+/* ================= Navigation ================= */
+function showHome(){
+  currentSpace = null; tasks = []; photoCache = {};
+  document.getElementById('backBtn').style.display = 'none';
+  document.getElementById('headerTitle').textContent = 'Site Finishing Tracker';
+  document.getElementById('headerSub').textContent = 'Select or create a space to begin';
+  document.getElementById('progressWrap').style.display = 'none';
+  document.getElementById('barTrack').style.display = 'none';
+  document.getElementById('spaceToolbar').style.display = 'none';
+  document.getElementById('homeToolbar').style.display = 'flex';
+  document.getElementById('filters').style.display = 'none';
+  document.getElementById('addBtn').textContent = '+ Add new space';
+  document.getElementById('reportView').classList.remove('open');
+  renderHome();
+}
+
+async function openSpace(spaceId){
+  const space = await dbGet('spaces', spaceId);
+  if(!space) return;
+  if(!space.reportDate){ space.reportDate = todayStr(); await dbPut('spaces', space); }
+  currentSpace = space;
+  tasks = await dbGetAllByIndex('tasks', 'spaceId', spaceId);
+  photoCache = {};
+  const withPhoto = tasks.filter(t => t.hasPhoto);
+  await Promise.all(withPhoto.map(async t => {
+    const p = await dbGet('photos', t.id);
+    if(p) photoCache[t.id] = p.dataUrl;
+  }));
+  document.getElementById('backBtn').style.display = 'inline-block';
+  document.getElementById('headerTitle').textContent = space.name;
+  document.getElementById('headerSub').textContent = 'Report date: ' + formatDate(space.reportDate);
+  document.getElementById('progressWrap').style.display = 'block';
+  document.getElementById('barTrack').style.display = 'block';
+  document.getElementById('spaceToolbar').style.display = 'flex';
+  document.getElementById('homeToolbar').style.display = 'none';
+  document.getElementById('filters').style.display = 'flex';
+  document.getElementById('addBtn').textContent = '+ Add new task';
+  document.getElementById('reportView').classList.remove('open');
+  currentFilter = 'all';
+  document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.f === 'all'));
+  renderSpace();
+}
+
+/* ================= Home (space list) ================= */
+async function renderHome(){
+  const spaces = await dbGetAll('spaces');
+  const main = document.getElementById('main');
+  main.innerHTML = '';
+  if(spaces.length === 0){
+    main.innerHTML = '<div class="empty">No spaces yet. Tap "+ Add new space" to create your first one (e.g. a room, unit, or floor).</div>';
+    return;
+  }
+  spaces.sort((a,b) => a.name.localeCompare(b.name));
+  for(const s of spaces){
+    const spaceTasks = await dbGetAllByIndex('tasks', 'spaceId', s.id);
+    const total = spaceTasks.length;
+    const done = spaceTasks.filter(t=>t.status==='done').length;
+    const pct = total ? Math.round((done/total)*100) : 0;
+    const card = document.createElement('div');
+    card.className = 'space-card';
+    card.innerHTML = `
+      <h3>${escapeHtml(s.name)}</h3>
+      <div class="meta"><span>${done} of ${total} done</span><span>${pct}%</span></div>
+      <div class="mini-bar"><div class="mini-fill" style="width:${pct}%"></div></div>
+    `;
+    card.addEventListener('click', () => openSpace(s.id));
+    main.appendChild(card);
+  }
+}
+
+/* ================= Space checklist ================= */
+function updateProgress(){
+  const total = tasks.length;
+  const done = tasks.filter(t=>t.status==='done').length;
+  const inprog = tasks.filter(t=>t.status==='inprogress').length;
+  const pct = total ? Math.round((done/total)*100) : 0;
+  document.getElementById('progressNum').textContent = pct + '%';
+  document.getElementById('progressLabel').textContent = `${done} of ${total} done`;
+  document.getElementById('barFill').style.width = pct + '%';
+}
+
+function groupByCategory(list){
+  const map = new Map();
+  list.forEach(t => { if(!map.has(t.category)) map.set(t.category, []); map.get(t.category).push(t); });
+  return map;
+}
+
+function renderSpace(){
+  updateProgress();
+  const main = document.getElementById('main');
+  main.innerHTML = '';
+  const filtered = currentFilter === 'all' ? tasks : tasks.filter(t => t.status === currentFilter);
+  if(filtered.length === 0){
+    main.innerHTML = '<div class="empty">No tasks in this status.</div>';
+    return;
+  }
+  const groups = groupByCategory(filtered);
+  groups.forEach((items, category) => {
+    const h = document.createElement('div');
+    h.className = 'cat-heading';
+    h.innerHTML = `<span>${escapeHtml(category)}</span><span class="cat-count">${items.length}</span>`;
+    main.appendChild(h);
+    items.forEach(t => main.appendChild(renderCard(t)));
+  });
+}
+
+function scheduleSaveTask(t){
+  clearTimeout(saveTimers[t.id]);
+  saveTimers[t.id] = setTimeout(async () => {
+    try{ await dbPut('tasks', t); }catch(e){ showToast('Save failed'); }
+  }, 400);
+}
+
+function renderCard(t){
+  const card = document.createElement('div');
+  card.className = 'card status-' + t.status;
+  card.dataset.id = t.id;
+  card.innerHTML = `
+    <div class="card-head">
+      <textarea class="task-title" rows="1" data-field="task">${escapeHtml(t.task)}</textarea>
+      <button class="del-btn" title="Delete">&#10005;</button>
+    </div>
+    <input class="cat-select" data-field="category" value="${escapeHtml(t.category)}" placeholder="Category">
+    <label class="field-label">Prerequisite</label>
+    <textarea class="prereq-input" data-field="prereq" rows="1" placeholder="What needs to be done before this task?">${escapeHtml(t.prereq)}</textarea>
+    <div class="status-row">
+      <div class="status-btn" data-s="notstarted">Not started</div>
+      <div class="status-btn" data-s="inprogress">In progress</div>
+      <div class="status-btn" data-s="done">Completed</div>
+    </div>
+    <div class="date-row">
+      <div class="date-field"><label class="field-label">Start date</label><input type="date" data-field="startDate" value="${t.startDate||''}"></div>
+      <div class="date-field"><label class="field-label">End date</label><input type="date" data-field="endDate" value="${t.endDate||''}"></div>
+    </div>
+    <label class="field-label">Final notes</label>
+    <textarea class="notes-input" data-field="notes" placeholder="Notes, defects, or handover remarks...">${escapeHtml(t.notes)}</textarea>
+    <div class="photo-row">
+      ${photoCache[t.id] ? `<img class="photo-thumb" src="${photoCache[t.id]}">` : ''}
+      <label class="photo-btn">&#128247; ${photoCache[t.id] ? 'Change photo' : 'Add photo'}<input type="file" accept="image/*" capture="environment" class="photo-input"></label>
+    </div>
+  `;
+
+  card.querySelectorAll('.status-btn').forEach(btn => {
+    if(btn.dataset.s === t.status) btn.classList.add('sel');
+    btn.addEventListener('click', () => {
+      t.status = btn.dataset.s;
+      card.className = 'card status-' + t.status;
+      card.querySelectorAll('.status-btn').forEach(b => b.classList.toggle('sel', b.dataset.s === t.status));
+      updateProgress();
+      scheduleSaveTask(t);
+    });
+  });
+  card.querySelector('[data-field="task"]').addEventListener('input', e => { t.task = e.target.value; scheduleSaveTask(t); });
+  card.querySelector('[data-field="category"]').addEventListener('change', e => { t.category = e.target.value || 'Uncategorized'; scheduleSaveTask(t); renderSpace(); });
+  card.querySelector('[data-field="prereq"]').addEventListener('input', e => { t.prereq = e.target.value; scheduleSaveTask(t); });
+  card.querySelector('[data-field="notes"]').addEventListener('input', e => { t.notes = e.target.value; scheduleSaveTask(t); });
+  card.querySelector('[data-field="startDate"]').addEventListener('change', e => { t.startDate = e.target.value; scheduleSaveTask(t); });
+  card.querySelector('[data-field="endDate"]').addEventListener('change', e => { t.endDate = e.target.value; scheduleSaveTask(t); });
+
+  card.querySelector('.del-btn').addEventListener('click', async () => {
+    if(!confirm('Delete this task?')) return;
+    tasks = tasks.filter(x => x.id !== t.id);
+    delete photoCache[t.id];
+    await dbDelete('tasks', t.id);
+    if(t.hasPhoto) await dbDelete('photos', t.id).catch(()=>{});
+    renderSpace();
+  });
+
+  card.querySelector('.photo-input').addEventListener('change', e => handlePhotoUpload(e, t));
+  const thumb = card.querySelector('.photo-thumb');
+  if(thumb) thumb.addEventListener('click', () => openLightbox(photoCache[t.id]));
+
+  return card;
+}
+
+function handlePhotoUpload(e, t){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = evt => {
+    const img = new Image();
+    img.onload = async () => {
+      const maxW = 700;
+      const scale = Math.min(1, maxW / img.width);
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width * scale; canvas.height = img.height * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+      try{
+        await dbPut('photos', { taskId: t.id, dataUrl });
+        photoCache[t.id] = dataUrl;
+        t.hasPhoto = true;
+        await dbPut('tasks', t);
+        renderSpace();
+      }catch(err){ showToast('Photo could not be saved'); }
+    };
+    img.src = evt.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function openLightbox(src){
+  if(!src) return;
+  document.getElementById('lbImg').src = src;
+  document.getElementById('lightbox').classList.add('open');
+}
+document.getElementById('lbClose').addEventListener('click', () => document.getElementById('lightbox').classList.remove('open'));
+document.getElementById('lightbox').addEventListener('click', e => { if(e.target.id === 'lightbox') document.getElementById('lightbox').classList.remove('open'); });
+
+document.getElementById('filters').addEventListener('click', e => {
+  const chip = e.target.closest('.chip');
+  if(!chip) return;
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  chip.classList.add('active');
+  currentFilter = chip.dataset.f;
+  renderSpace();
+});
+
+document.getElementById('backBtn').addEventListener('click', showHome);
+
+/* ================= Add space / add task ================= */
+document.getElementById('addBtn').addEventListener('click', () => {
+  if(!currentSpace){
+    openModal('New space', '', async name => {
+      if(!name) return;
+      const space = { id: uid(), name, createdAt: Date.now(), reportDate: todayStr() };
+      await dbPut('spaces', space);
+      for(const [category, task, prereq] of DEFAULT_TASKS){
+        await dbPut('tasks', { id: uid(), spaceId: space.id, category, task, prereq, status:'notstarted', notes:'', startDate:'', endDate:'', hasPhoto:false });
+      }
+      showToast('Space created');
+      openSpace(space.id);
+    });
+  } else {
+    (async () => {
+      const t = { id: uid(), spaceId: currentSpace.id, category:'New Task', task:'Enter task description', prereq:'', status:'notstarted', notes:'', startDate:'', endDate:'', hasPhoto:false };
+      await dbPut('tasks', t);
+      tasks.push(t);
+      renderSpace();
+      setTimeout(() => {
+        const el = document.querySelector(`.card[data-id="${t.id}"] .task-title`);
+        if(el){ el.focus(); el.select(); el.scrollIntoView({behavior:'smooth', block:'center'}); }
+      }, 50);
+    })();
+  }
+});
+
+document.getElementById('renameSpaceBtn').addEventListener('click', () => {
+  openModal('Rename space', currentSpace.name, async name => {
+    if(!name) return;
+    currentSpace.name = name;
+    await dbPut('spaces', currentSpace);
+    document.getElementById('headerTitle').textContent = name;
+  });
+});
+
+document.getElementById('reportDateBtn').addEventListener('click', () => {
+  openModal('Report date', currentSpace.reportDate || todayStr(), async val => {
+    if(!val) return;
+    currentSpace.reportDate = val;
+    await dbPut('spaces', currentSpace);
+    document.getElementById('headerSub').textContent = 'Report date: ' + formatDate(val);
+  }, 'date');
+});
+
+/* ================= Modal ================= */
+function openModal(title, initial, onConfirm, type){
+  document.getElementById('modalTitle').textContent = title;
+  const input = document.getElementById('modalInput');
+  input.type = type || 'text';
+  input.placeholder = type === 'date' ? '' : 'e.g. Unit 3 - Kitchen';
+  input.value = initial;
+  modalOnConfirm = onConfirm;
+  document.getElementById('modalOverlay').classList.add('open');
+  setTimeout(() => input.focus(), 50);
+}
+document.getElementById('modalCancel').addEventListener('click', () => document.getElementById('modalOverlay').classList.remove('open'));
+document.getElementById('modalConfirm').addEventListener('click', () => {
+  const val = document.getElementById('modalInput').value.trim();
+  document.getElementById('modalOverlay').classList.remove('open');
+  if(modalOnConfirm) modalOnConfirm(val);
+});
+document.getElementById('modalInput').addEventListener('keydown', e => { if(e.key === 'Enter') document.getElementById('modalConfirm').click(); });
+
+/* ================= Excel export ================= */
+document.getElementById('exportExcelBtn').addEventListener('click', () => {
+  const rows = [['No.','Category / Phase','Task Description','Prerequisite','Status','Start Date','End Date','Final Notes']];
+  tasks.forEach((t,i) => rows.push([i+1, t.category, t.task, t.prereq, STATUS[t.status], t.startDate||'', t.endDate||'', t.notes||'']));
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:5},{wch:22},{wch:36},{wch:34},{wch:14},{wch:12},{wch:12},{wch:38}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Checklist');
+  const safeName = currentSpace.name.replace(/[^a-z0-9\-_]+/gi, '_');
+  XLSX.writeFile(wb, `${safeName}-checklist.xlsx`);
+  showToast('Excel file downloaded');
+});
+
+/* ================= Printable report ================= */
+document.getElementById('reportBtn').addEventListener('click', () => {
+  const total = tasks.length;
+  const done = tasks.filter(t=>t.status==='done').length;
+  const inprog = tasks.filter(t=>t.status==='inprogress').length;
+  const notstarted = tasks.filter(t=>t.status==='notstarted').length;
+  const groups = groupByCategory(tasks);
+
+  let html = `
+    <div class="report-header">
+      <h1>${escapeHtml(currentSpace.name)} &mdash; Finishing Report</h1>
+      <div class="meta">Report date: ${formatDate(currentSpace.reportDate || todayStr())} &middot; ${total} tasks</div>
+    </div>
+    <div class="report-summary">
+      <span><b>${done}</b> completed</span>
+      <span><b>${inprog}</b> in progress</span>
+      <span><b>${notstarted}</b> not started</span>
+    </div>
+  `;
+  groups.forEach((items, category) => {
+    html += `<div class="report-cat">${escapeHtml(category)}</div>`;
+    items.forEach(t => {
+      const badgeClass = t.status === 'done' ? 'rb-done' : t.status === 'inprogress' ? 'rb-inprogress' : 'rb-notstarted';
+      html += `<div class="report-item">
+        <div class="rt-title">${escapeHtml(t.task)}<span class="report-badge ${badgeClass}">${STATUS[t.status]}</span></div>
+        ${t.prereq ? `<div class="rt-line"><b>Prerequisite:</b> ${escapeHtml(t.prereq)}</div>` : ''}
+        ${t.startDate ? `<div class="rt-line"><b>Start date:</b> ${t.startDate}</div>` : ''}
+        ${t.endDate ? `<div class="rt-line"><b>End date:</b> ${t.endDate}</div>` : ''}
+        ${t.notes ? `<div class="rt-line"><b>Notes:</b> ${escapeHtml(t.notes)}</div>` : ''}
+        ${photoCache[t.id] ? `<img src="${photoCache[t.id]}">` : ''}
+      </div>`;
+    });
+  });
+  document.getElementById('reportContent').innerHTML = html;
+  document.getElementById('reportView').classList.add('open');
+  window.scrollTo(0,0);
+});
+document.getElementById('reportBack').addEventListener('click', () => document.getElementById('reportView').classList.remove('open'));
+document.getElementById('reportPrint').addEventListener('click', () => window.print());
+
+/* ================= Backup / restore all data ================= */
+document.getElementById('backupBtn').addEventListener('click', async () => {
+  const spaces = await dbGetAll('spaces');
+  const allTasks = await dbGetAll('tasks');
+  const allPhotos = await dbGetAll('photos');
+  const payload = { version:1, exportedAt: new Date().toISOString(), spaces, tasks: allTasks, photos: allPhotos };
+  const blob = new Blob([JSON.stringify(payload)], { type:'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `site-tracker-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Backup downloaded');
+});
+
+document.getElementById('restoreBtn').addEventListener('click', () => document.getElementById('restoreInput').click());
+document.getElementById('restoreInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async evt => {
+    try{
+      const payload = JSON.parse(evt.target.result);
+      if(!confirm(`This will add ${payload.spaces.length} space(s) from the backup. Continue?`)) return;
+      for(const s of payload.spaces) await dbPut('spaces', s);
+      for(const t of payload.tasks) await dbPut('tasks', t);
+      for(const p of payload.photos) await dbPut('photos', p);
+      showToast('Backup restored');
+      renderHome();
+    }catch(err){ alert('This file could not be read as a valid backup.'); }
+  };
+  reader.readAsText(file);
+});
+
+/* ================= Init ================= */
+openDB().then(showHome).catch(() => {
+  document.getElementById('main').innerHTML = '<div class="empty">This browser does not support the storage this app needs. Please use a recent version of Chrome, Safari, Firefox, or Edge.</div>';
+});
+</script>
+</body>
+</html>
