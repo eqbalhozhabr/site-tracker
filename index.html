@@ -245,11 +245,29 @@
   }
   .report-toolbar button{ border:1px solid var(--line); background:var(--panel); padding:8px 14px; border-radius:var(--radius); cursor:pointer; font-size:13px; font-weight:600; }
   .report-toolbar button.primary{ background:var(--accent); color:#fff; border-color:var(--accent); }
+  .report-status-section{ margin:26px 0; }
+  .report-status-heading{
+    font-size:15px; font-weight:800; margin:0 0 12px; padding-bottom:6px; border-bottom:2px solid var(--line);
+    display:inline-block; padding-inline-end:10px;
+  }
+  .report-status-heading.sh-done{ color:var(--green); border-color:var(--green); }
+  .report-status-heading.sh-inprogress{ color:#8a6400; border-color:var(--amber); }
+  .report-status-heading.sh-notstarted{ color:var(--ink-soft); border-color:var(--stone); }
+  .report-status-empty{ font-size:13px; color:var(--ink-soft); font-style:italic; }
+  .report-status-item{ font-size:13.5px; line-height:1.7; margin:0 0 14px; }
+  .report-status-item .rt-cat{ font-size:11.5px; color:var(--ink-soft); }
+  .report-status-item img{ max-width:260px; max-height:200px; margin-top:6px; border-radius:4px; border:1px solid var(--line); display:block; }
   @media print{
-    .report-toolbar{ display:none; }
-    body *{ visibility:hidden; }
-    #reportView, #reportView *{ visibility:visible; }
-    #reportView{ position:absolute; inset:0; }
+    /* Print only #reportView: display:none (not visibility:hidden) removes
+       the rest of the app from the layout entirely, so the browser paginates
+       just the report content instead of reserving space for the whole
+       on-screen app and effectively "screenshotting" one giant page. */
+    body > *:not(#reportView){ display:none !important; }
+    #reportView{ position:static !important; }
+    .report-toolbar{ display:none !important; }
+    .report-page{ max-width:none !important; padding:0 !important; }
+    .report-item, .report-status-item{ break-inside:avoid; page-break-inside:avoid; }
+    .report-cat, .report-status-heading{ break-after:avoid; page-break-after:avoid; }
   }
 </style>
 </head>
@@ -275,6 +293,7 @@
     <button class="tool-btn" id="importExcelBtn">Import Excel</button>
     <input type="file" id="importExcelInput" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" style="display:none;">
     <button class="tool-btn" id="reportBtn">Generate report</button>
+    <button class="tool-btn" id="statusReportBtn">Detailed status report</button>
     <button class="tool-btn" id="historyBtn">Report history</button>
     <button class="tool-btn" id="reportDateBtn">Report date</button>
     <button class="tool-btn" id="renameSpaceBtn">Rename space</button>
@@ -1032,13 +1051,21 @@ document.getElementById('importExcelInput').addEventListener('change', async e =
 });
 
 /* ================= Printable report ================= */
-async function saveReportSnapshot(html){
+async function saveReportSnapshot(html, type){
   const existing = await dbGetAllByIndex('reportHistory', 'spaceId', currentSpace.id);
-  const match = existing.find(h => h.reportDate === currentSpace.reportDate);
-  const entry = match || { id: uid(), spaceId: currentSpace.id, reportDate: currentSpace.reportDate };
+  const match = existing.find(h => h.reportDate === currentSpace.reportDate && (h.type||'category') === type);
+  const entry = match || { id: uid(), spaceId: currentSpace.id, reportDate: currentSpace.reportDate, type };
   entry.html = html;
   entry.generatedAt = Date.now();
   await dbPut('reportHistory', entry);
+}
+
+function openGeneratedReport(html){
+  document.getElementById('reportContent').innerHTML = html;
+  reportBackTarget = 'checklist';
+  document.getElementById('reportBack').textContent = '← Back to checklist';
+  document.getElementById('reportView').classList.add('open');
+  window.scrollTo(0,0);
 }
 
 document.getElementById('reportBtn').addEventListener('click', async () => {
@@ -1073,12 +1100,49 @@ document.getElementById('reportBtn').addEventListener('click', async () => {
       </div>`;
     });
   });
-  await saveReportSnapshot(html);
-  document.getElementById('reportContent').innerHTML = html;
-  reportBackTarget = 'checklist';
-  document.getElementById('reportBack').textContent = '← Back to checklist';
-  document.getElementById('reportView').classList.add('open');
-  window.scrollTo(0,0);
+  await saveReportSnapshot(html, 'category');
+  openGeneratedReport(html);
+});
+
+/* ================= Detailed status (narrative) report ================= */
+document.getElementById('statusReportBtn').addEventListener('click', async () => {
+  const total = tasks.length;
+  const sections = [
+    { key:'done', title:'Completed', className:'sh-done' },
+    { key:'inprogress', title:'In Progress', className:'sh-inprogress' },
+    { key:'notstarted', title:'Not Started', className:'sh-notstarted' },
+  ];
+
+  let html = `
+    <div class="report-header">
+      <h1>${escapeHtml(currentSpace.name)} &mdash; Detailed Status Report</h1>
+      <div class="meta">Report date: ${formatDate(currentSpace.reportDate || todayStr())} &middot; ${total} tasks</div>
+    </div>
+  `;
+  sections.forEach(sec => {
+    const items = tasks.filter(t => t.status === sec.key);
+    html += `<div class="report-status-section">
+      <h2 class="report-status-heading ${sec.className}">${sec.title} (${items.length})</h2>`;
+    if(items.length === 0){
+      html += `<p class="report-status-empty">No tasks in this status.</p>`;
+    } else {
+      items.forEach(t => {
+        const parts = [];
+        if(t.prereq) parts.push(`Prerequisite: ${escapeHtml(t.prereq)}.`);
+        if(t.startDate) parts.push(`Started ${t.startDate}.`);
+        if(t.endDate) parts.push(`Finished ${t.endDate}.`);
+        if(t.notes) parts.push(`Notes: ${escapeHtml(t.notes)}.`);
+        html += `<p class="report-status-item">
+          <b>${escapeHtml(t.task)}</b> <span class="rt-cat">(${escapeHtml(t.category)})</span>.
+          ${parts.join(' ')}
+          ${photoCache[t.id] ? `<br><img src="${photoCache[t.id]}">` : ''}
+        </p>`;
+      });
+    }
+    html += `</div>`;
+  });
+  await saveReportSnapshot(html, 'status');
+  openGeneratedReport(html);
 });
 document.getElementById('reportBack').addEventListener('click', () => {
   document.getElementById('reportView').classList.remove('open');
@@ -1100,7 +1164,7 @@ document.getElementById('historyBtn').addEventListener('click', async () => {
       entries.map(en => `
         <div class="history-item">
           <div>
-            <div class="history-date">${formatDate(en.reportDate)}</div>
+            <div class="history-date">${formatDate(en.reportDate)} <span class="history-meta">&middot; ${(en.type||'category') === 'status' ? 'Detailed status report' : 'Checklist report'}</span></div>
             <div class="history-meta">Saved ${new Date(en.generatedAt).toLocaleString()}</div>
           </div>
           <button class="history-view-btn" data-id="${en.id}">View report</button>
