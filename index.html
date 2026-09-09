@@ -302,6 +302,7 @@
     <button class="tool-btn" id="backupBtn">Backup all data (.json)</button>
     <button class="tool-btn" id="restoreBtn">Restore backup</button>
     <input type="file" id="restoreInput" accept=".json,application/json,text/plain" style="display:none;">
+    <button class="tool-btn" id="exportReportsBtn">Export all reports (HTML)</button>
     <button class="tool-btn" id="editSpacesBtn">Edit</button>
     <button class="tool-btn" id="selectAllBtn" style="display:none;">Select all</button>
   </div>
@@ -1264,6 +1265,159 @@ document.getElementById('backupBtn').addEventListener('click', async () => {
   a.click();
   URL.revokeObjectURL(url);
   showToast('Backup downloaded');
+});
+
+/* ================= Export all reports as a standalone browsable HTML file ================= */
+document.getElementById('exportReportsBtn').addEventListener('click', async () => {
+  const spaces = await dbGetAll('spaces');
+  const allHistory = await dbGetAll('reportHistory');
+  if(allHistory.length === 0){
+    alert('There are no saved reports yet. Open a space and tap "Generate report" or "Detailed status report" first.');
+    return;
+  }
+  const spaceNameById = Object.fromEntries(spaces.map(s => [s.id, s.name]));
+  const reports = allHistory
+    .map(h => ({
+      spaceName: spaceNameById[h.spaceId] || 'Unknown space',
+      reportDate: h.reportDate,
+      type: h.type || 'category',
+      generatedAt: h.generatedAt,
+      html: h.html
+    }))
+    .sort((a,b) => a.spaceName.localeCompare(b.spaceName) || (b.reportDate||'').localeCompare(a.reportDate||''));
+
+  const dataJson = JSON.stringify(reports).replace(/<\/script/gi, '<\\/script');
+
+  const doc = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Site Finishing Tracker &mdash; Reports</title>
+<style>
+  :root{ --ink:#211d18; --ink-soft:#6b6357; --line:#cfc6b2; --panel:#f6f3ea; --bg:#eae6dc; --accent:#d9541c;
+    --amber:#e2a100; --green:#4c7a3d; --stone:#9a9080; }
+  *{ box-sizing:border-box; }
+  body{ font-family:'Archivo',Arial,sans-serif; font-size:15px; line-height:1.6; color:var(--ink); background:var(--bg); margin:0; }
+  header{ background:var(--ink); color:#f2ede0; padding:16px; border-bottom:4px solid var(--accent); }
+  header h1{ font-size:18px; margin:0; }
+  header .sub{ font-size:12px; color:#c9c0ac; margin:4px 0 0; }
+  #backBtn{ border:1px solid #4a453a; background:transparent; color:#f2ede0; border-radius:3px; padding:7px 10px; font-size:13px; cursor:pointer; display:none; margin-top:10px; }
+  main{ max-width:760px; margin:0 auto; padding:16px; }
+  .space-group{ margin-bottom:26px; }
+  .space-group h2{ font-size:15px; border-bottom:2px solid var(--line); padding-bottom:6px; margin:0 0 10px; }
+  .report-row{
+    background:var(--panel); border:1px solid var(--line); border-inline-start:4px solid var(--accent); border-radius:3px;
+    padding:12px 14px; margin-bottom:8px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:10px;
+  }
+  .report-row:hover{ border-color:var(--accent); }
+  .report-row .rr-date{ font-weight:700; font-size:14px; }
+  .report-row .rr-meta{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; }
+  .report-row .rr-type{ font-size:10.5px; font-weight:700; padding:3px 9px; border-radius:99px; color:#fff; background:var(--stone); flex:0 0 auto; white-space:nowrap; }
+  .report-row .rr-type.status{ background:#5b7fb0; }
+  #detailView{ display:none; background:#fff; margin:-16px -16px 0; padding:24px 16px 60px; }
+  #detailView.open{ display:block; }
+  #listView.hidden{ display:none; }
+  .empty{ text-align:center; color:var(--ink-soft); padding:40px 20px; font-size:13.5px; }
+  .report-header{ border-bottom:3px solid var(--ink); padding-bottom:14px; margin-bottom:18px; }
+  .report-header h1{ font-size:22px; margin:0 0 4px; }
+  .report-header .meta{ font-size:12.5px; color:var(--ink-soft); }
+  .report-summary{ display:flex; gap:18px; margin:14px 0 22px; font-size:13px; flex-wrap:wrap; }
+  .report-cat{ font-size:14px; font-weight:800; margin:22px 0 10px; border-bottom:1px solid var(--line); padding-bottom:6px; }
+  .report-item{ margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid #eee; }
+  .report-item .rt-title{ font-weight:700; font-size:14px; }
+  .report-badge{ display:inline-block; font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px; margin-inline-start:8px; color:#fff; vertical-align:middle; }
+  .rb-notstarted{ background:var(--stone); } .rb-inprogress{ background:var(--amber); color:#231c04; } .rb-done{ background:var(--green); }
+  .report-item .rt-line{ font-size:12.5px; color:var(--ink-soft); margin-top:3px; }
+  .report-item img{ max-width:260px; max-height:200px; margin-top:8px; border-radius:4px; border:1px solid var(--line); display:block; }
+  .report-status-section{ margin:26px 0; }
+  .report-status-heading{ font-size:15px; font-weight:800; margin:0 0 12px; padding-bottom:6px; border-bottom:2px solid var(--line); display:inline-block; padding-inline-end:10px; }
+  .report-status-heading.sh-done{ color:var(--green); border-color:var(--green); }
+  .report-status-heading.sh-inprogress{ color:#8a6400; border-color:var(--amber); }
+  .report-status-heading.sh-notstarted{ color:var(--ink-soft); border-color:var(--stone); }
+  .report-status-empty{ font-size:13px; color:var(--ink-soft); font-style:italic; }
+  .report-status-item{ font-size:13.5px; line-height:1.7; margin:0 0 14px; }
+  .report-status-item .rt-cat{ font-size:11.5px; color:var(--ink-soft); }
+  .report-status-item img{ max-width:260px; max-height:200px; margin-top:6px; border-radius:4px; border:1px solid var(--line); display:block; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="headerTitle">Site Finishing Tracker &mdash; Reports</h1>
+  <p class="sub" id="headerSub">Select a report to view</p>
+  <button id="backBtn">&larr; Back to reports</button>
+</header>
+<main>
+  <div id="listView"></div>
+  <div id="detailView"></div>
+</main>
+<script>
+const REPORTS = ${dataJson};
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function formatDate(d){
+  if(!d) return '';
+  const dt = new Date(d + 'T00:00:00');
+  if(isNaN(dt)) return d;
+  return dt.toLocaleDateString(undefined, { year:'numeric', month:'long', day:'numeric' });
+}
+function renderList(){
+  document.getElementById('backBtn').style.display = 'none';
+  document.getElementById('headerTitle').textContent = 'Site Finishing Tracker — Reports';
+  document.getElementById('headerSub').textContent = REPORTS.length + ' saved report(s)';
+  document.getElementById('detailView').classList.remove('open');
+  document.getElementById('detailView').innerHTML = '';
+  const listView = document.getElementById('listView');
+  listView.classList.remove('hidden');
+  if(REPORTS.length === 0){
+    listView.innerHTML = '<div class="empty">No saved reports.</div>';
+    return;
+  }
+  const groups = new Map();
+  REPORTS.forEach(r => { if(!groups.has(r.spaceName)) groups.set(r.spaceName, []); groups.get(r.spaceName).push(r); });
+  let html = '';
+  groups.forEach((items, spaceName) => {
+    html += '<div class="space-group"><h2>' + escapeHtml(spaceName) + '</h2>';
+    items.forEach(r => {
+      const globalIndex = REPORTS.indexOf(r);
+      html += '<div class="report-row" data-idx="' + globalIndex + '">' +
+        '<div><div class="rr-date">' + formatDate(r.reportDate) + '</div>' +
+        '<div class="rr-meta">Saved ' + new Date(r.generatedAt).toLocaleString() + '</div></div>' +
+        '<span class="rr-type' + (r.type === 'status' ? ' status' : '') + '">' + (r.type === 'status' ? 'Detailed status' : 'Checklist') + '</span>' +
+        '</div>';
+    });
+    html += '</div>';
+  });
+  listView.innerHTML = html;
+}
+function openReport(idx){
+  const r = REPORTS[idx];
+  if(!r) return;
+  document.getElementById('listView').classList.add('hidden');
+  document.getElementById('backBtn').style.display = 'inline-block';
+  document.getElementById('headerTitle').textContent = r.spaceName;
+  document.getElementById('headerSub').textContent = formatDate(r.reportDate);
+  const detail = document.getElementById('detailView');
+  detail.innerHTML = r.html;
+  detail.classList.add('open');
+  window.scrollTo(0,0);
+}
+document.getElementById('listView').addEventListener('click', e => {
+  const row = e.target.closest('.report-row');
+  if(!row) return;
+  openReport(parseInt(row.dataset.idx, 10));
+});
+document.getElementById('backBtn').addEventListener('click', renderList);
+renderList();
+<\/script>
+</body>
+</html>`;
+  const blob = new Blob([doc], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `site-tracker-reports-${todayStr()}.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast(`${reports.length} report(s) exported`);
 });
 
 document.getElementById('restoreBtn').addEventListener('click', () => document.getElementById('restoreInput').click());
