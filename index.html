@@ -742,7 +742,7 @@ function renderCard(t){
     <textarea class="notes-input" data-field="notes" placeholder="Notes, defects, or handover remarks...">${escapeHtml(t.notes)}</textarea>
     <div class="photo-row">
       ${photoCache[t.id] ? `<img class="photo-thumb" src="${photoCache[t.id]}">` : ''}
-      <label class="photo-btn">&#128247; ${photoCache[t.id] ? 'Change photo' : 'Add photo'}<input type="file" accept="image/*" capture="environment" class="photo-input"></label>
+      <label class="photo-btn">&#128247; ${photoCache[t.id] ? 'Change photo' : 'Add photo'}<input type="file" accept="image/*" class="photo-input"></label>
     </div>
   `;
 
