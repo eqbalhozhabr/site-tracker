@@ -265,6 +265,8 @@
   <div class="bar-track" id="barTrack" style="display:none;"><div class="bar-fill" id="barFill"></div></div>
   <div class="toolbar" id="spaceToolbar" style="display:none;">
     <button class="tool-btn" id="exportExcelBtn">Export Excel</button>
+    <button class="tool-btn" id="importExcelBtn">Import Excel</button>
+    <input type="file" id="importExcelInput" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" style="display:none;">
     <button class="tool-btn" id="reportBtn">Generate report</button>
     <button class="tool-btn" id="historyBtn">Report history</button>
     <button class="tool-btn" id="reportDateBtn">Report date</button>
@@ -923,6 +925,88 @@ document.getElementById('exportExcelBtn').addEventListener('click', () => {
   const safeName = currentSpace.name.replace(/[^a-z0-9\-_]+/gi, '_');
   XLSX.writeFile(wb, `${safeName}-checklist.xlsx`);
   showToast('Excel file downloaded');
+});
+
+/* ================= Excel import ================= */
+const STATUS_FROM_LABEL = { 'not started':'notstarted', 'in progress':'inprogress', 'completed':'done', 'done':'done' };
+function parseStatusCell(v){
+  const s = (v||'').toString().trim().toLowerCase();
+  return STATUS_FROM_LABEL[s] || null;
+}
+function parseDateCell(v){
+  if(v instanceof Date && !isNaN(v)) return v.toISOString().slice(0,10);
+  if(typeof v === 'string'){
+    const s = v.trim();
+    if(!s) return '';
+    if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const d = new Date(s);
+    if(!isNaN(d)) return d.toISOString().slice(0,10);
+    return '';
+  }
+  return '';
+}
+
+document.getElementById('importExcelBtn').addEventListener('click', () => document.getElementById('importExcelInput').click());
+document.getElementById('importExcelInput').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if(!file) return;
+  let rows;
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type:'array', cellDates:true });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
+  }catch(err){
+    alert('This file could not be read as an Excel checklist.');
+    return;
+  }
+  const dataRows = rows.slice(1).filter(r => r.some(c => (c||'').toString().trim() !== ''));
+  if(dataRows.length === 0){
+    alert('No task rows were found in this file. Make sure it uses the same columns as "Export Excel" (No. / Category / Task Description / Prerequisite / Status / Start Date / End Date / Final Notes).');
+    return;
+  }
+  if(!confirm(`This will update matching tasks (by description) and add any new ones found in "${file.name}" (${dataRows.length} row(s)). Continue?`)) return;
+
+  const usedIds = new Set();
+  let updated = 0, created = 0, skipped = 0;
+  for(const row of dataRows){
+    const [, category, taskDesc, prereq, statusText, startDate, endDate, notes] = row;
+    const descTrim = (taskDesc||'').toString().trim();
+    if(!descTrim){ skipped++; continue; }
+    const statusKey = parseStatusCell(statusText);
+    const sDate = parseDateCell(startDate);
+    const eDate = parseDateCell(endDate);
+    const match = tasks.find(t => !usedIds.has(t.id) && t.task.trim().toLowerCase() === descTrim.toLowerCase());
+
+    if(match){
+      usedIds.add(match.id);
+      match.category = (category||'').toString().trim() || 'Uncategorized';
+      match.task = descTrim;
+      match.prereq = (prereq||'').toString().trim();
+      if(statusKey) match.status = statusKey;
+      match.startDate = sDate;
+      match.endDate = eDate;
+      match.notes = (notes||'').toString().trim();
+      await dbPut('tasks', match);
+      updated++;
+    } else {
+      const newTask = {
+        id: uid(), spaceId: currentSpace.id,
+        category: (category||'').toString().trim() || 'Uncategorized',
+        task: descTrim,
+        prereq: (prereq||'').toString().trim(),
+        status: statusKey || 'notstarted',
+        notes: (notes||'').toString().trim(),
+        startDate: sDate, endDate: eDate, hasPhoto:false
+      };
+      await dbPut('tasks', newTask);
+      tasks.push(newTask);
+      created++;
+    }
+  }
+  renderSpace();
+  showToast(`Import complete: ${updated} updated, ${created} added${skipped ? ', ' + skipped + ' skipped' : ''}`);
 });
 
 /* ================= Printable report ================= */
