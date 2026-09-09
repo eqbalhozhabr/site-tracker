@@ -357,6 +357,7 @@
 <div id="reportView">
   <div class="report-toolbar">
     <button id="reportBack">&larr; Back to checklist</button>
+    <button id="reportDownload">Download HTML</button>
     <button class="primary" id="reportPrint">Print / Save as PDF</button>
   </div>
   <div class="report-page" id="reportContent"></div>
@@ -1150,6 +1151,67 @@ document.getElementById('reportBack').addEventListener('click', () => {
   reportBackTarget = 'checklist';
 });
 document.getElementById('reportPrint').addEventListener('click', () => window.print());
+
+document.getElementById('reportDownload').addEventListener('click', () => {
+  const contentHtml = document.getElementById('reportContent').innerHTML;
+  const titleEl = document.getElementById('reportContent').querySelector('h1');
+  const title = titleEl ? titleEl.textContent : (currentSpace ? currentSpace.name + ' — Report' : 'Report');
+  const standaloneCss = `
+    :root{ --ink:#211d18; --ink-soft:#6b6357; --line:#cfc6b2; --panel:#f6f3ea; --accent:#d9541c;
+      --amber:#e2a100; --green:#4c7a3d; --stone:#9a9080; }
+    *{ box-sizing:border-box; }
+    body{
+      font-family:'Archivo',Arial,sans-serif; font-size:15px; line-height:1.6; color:var(--ink);
+      background:#fff; margin:0; padding:30px 24px 60px; max-width:760px; margin-inline:auto;
+    }
+    .report-header{ border-bottom:3px solid var(--ink); padding-bottom:14px; margin-bottom:18px; }
+    .report-header h1{ font-size:22px; margin:0 0 4px; }
+    .report-header .meta{ font-size:12.5px; color:var(--ink-soft); }
+    .report-summary{ display:flex; gap:18px; margin:14px 0 22px; font-size:13px; flex-wrap:wrap; }
+    .report-cat{ font-size:14px; font-weight:800; margin:22px 0 10px; border-bottom:1px solid var(--line); padding-bottom:6px; }
+    .report-item{ margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid #eee; }
+    .report-item .rt-title{ font-weight:700; font-size:14px; }
+    .report-badge{
+      display:inline-block; font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px;
+      margin-inline-start:8px; color:#fff; vertical-align:middle;
+    }
+    .rb-notstarted{ background:var(--stone); } .rb-inprogress{ background:var(--amber); color:#231c04; } .rb-done{ background:var(--green); }
+    .report-item .rt-line{ font-size:12.5px; color:var(--ink-soft); margin-top:3px; }
+    .report-item img{ max-width:260px; max-height:200px; margin-top:8px; border-radius:4px; border:1px solid var(--line); display:block; }
+    .report-status-section{ margin:26px 0; }
+    .report-status-heading{
+      font-size:15px; font-weight:800; margin:0 0 12px; padding-bottom:6px; border-bottom:2px solid var(--line);
+      display:inline-block; padding-inline-end:10px;
+    }
+    .report-status-heading.sh-done{ color:var(--green); border-color:var(--green); }
+    .report-status-heading.sh-inprogress{ color:#8a6400; border-color:var(--amber); }
+    .report-status-heading.sh-notstarted{ color:var(--ink-soft); border-color:var(--stone); }
+    .report-status-empty{ font-size:13px; color:var(--ink-soft); font-style:italic; }
+    .report-status-item{ font-size:13.5px; line-height:1.7; margin:0 0 14px; }
+    .report-status-item .rt-cat{ font-size:11.5px; color:var(--ink-soft); }
+    .report-status-item img{ max-width:260px; max-height:200px; margin-top:6px; border-radius:4px; border:1px solid var(--line); display:block; }
+  `;
+  const doc = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${escapeHtml(title)}</title>
+<style>${standaloneCss}</style>
+</head>
+<body>
+${contentHtml}
+</body>
+</html>`;
+  const blob = new Blob([doc], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const safeName = (currentSpace ? currentSpace.name : 'report').replace(/[^a-z0-9\-_]+/gi, '_');
+  a.href = url; a.download = `${safeName}-report-${todayStr()}.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Report HTML downloaded');
+});
 
 /* ================= Report history ================= */
 document.getElementById('historyBtn').addEventListener('click', async () => {
