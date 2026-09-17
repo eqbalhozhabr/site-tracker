@@ -145,6 +145,23 @@
   .notes-input{ resize:vertical; min-height:44px; }
   .prereq-input:focus, .notes-input:focus, .task-title:focus, .cat-select:focus{ border-color: var(--accent); }
 
+  .dep-chips{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .dep-chip{
+    display:inline-flex; align-items:center; gap:6px; background:#fff; border:1px solid var(--line); border-radius:99px;
+    padding:5px 6px 5px 11px; font-size:12px; color:var(--ink);
+  }
+  .dep-chip .dep-remove{ border:none; background:var(--line); color:var(--ink); border-radius:50%; width:16px; height:16px; font-size:11px; line-height:1; cursor:pointer; padding:0; }
+  .dep-add-btn{
+    border:1px dashed var(--line); background:#fff; color:var(--ink-soft); font-size:12px; padding:6px 11px;
+    border-radius:99px; cursor:pointer;
+  }
+  .dep-add-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .dep-picker-modal{ max-width:420px; }
+  .dep-picker-list{ max-height:320px; overflow-y:auto; margin:12px 0; border:1px solid var(--line); border-radius:var(--radius); }
+  .dep-picker-item{ display:flex; align-items:center; gap:9px; padding:9px 10px; border-bottom:1px solid #eee; font-size:13.5px; cursor:pointer; }
+  .dep-picker-item:last-child{ border-bottom:none; }
+  .dep-picker-cat{ font-size:11.5px; color:var(--ink-soft); }
+
   .status-row{ display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
   .status-btn{
     flex:1; min-width:90px; padding:8px 6px; text-align:center; font-size:12px; font-weight:700;
@@ -381,6 +398,17 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="depPickerOverlay">
+  <div class="modal dep-picker-modal">
+    <h3>Select dependencies</h3>
+    <div class="dep-picker-list" id="depPickerList"></div>
+    <div class="modal-actions">
+      <button class="cancel" id="depPickerCancel">Cancel</button>
+      <button class="confirm" id="depPickerConfirm">Done</button>
+    </div>
+  </div>
+</div>
+
 <div id="reportView">
   <div class="report-toolbar">
     <button id="reportBack">&larr; Back to checklist</button>
@@ -440,6 +468,7 @@ let currentFilter = 'all';
 let currentSearch = '';
 let saveTimers = {};
 let modalOnConfirm = null;
+let depPickerTaskId = null;
 let sortMode = localStorage.getItem('spaceSortMode') || 'manual';
 let reportBackTarget = 'checklist';
 let editMode = false;
@@ -786,8 +815,16 @@ function renderCard(t){
       <button class="del-btn" title="Delete">&#10005;</button>
     </div>
     <input class="cat-select" data-field="category" value="${escapeHtml(t.category)}" placeholder="Category">
-    <label class="field-label">Prerequisite</label>
+    <label class="field-label">Prerequisite (notes)</label>
     <textarea class="prereq-input" data-field="prereq" rows="1" placeholder="What needs to be done before this task?">${escapeHtml(t.prereq)}</textarea>
+    <label class="field-label">Depends on (for Timeline)</label>
+    <div class="dep-chips">
+      ${(t.prereqIds||[]).map(depId => {
+        const depTask = tasks.find(x => x.id === depId);
+        return depTask ? `<span class="dep-chip">${escapeHtml(depTask.task)}<button class="dep-remove" data-dep-id="${depId}" title="Remove dependency">&times;</button></span>` : '';
+      }).join('')}
+      <button class="dep-add-btn" type="button">+ Add dependency</button>
+    </div>
     <div class="status-row">
       <div class="status-btn" data-s="notstarted">Not started</div>
       <div class="status-btn" data-s="inprogress">In progress</div>
@@ -827,12 +864,27 @@ function renderCard(t){
   card.querySelector('[data-field="startDate"]').addEventListener('change', e => { t.startDate = e.target.value; scheduleSaveTask(t); });
   card.querySelector('[data-field="endDate"]').addEventListener('change', e => { t.endDate = e.target.value; scheduleSaveTask(t); });
 
+  card.querySelector('.dep-add-btn').addEventListener('click', () => openDepPicker(t.id));
+  card.querySelectorAll('.dep-remove').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      t.prereqIds = (t.prereqIds||[]).filter(id => id !== btn.dataset.depId);
+      await dbPut('tasks', t);
+      renderSpace();
+    });
+  });
+
   card.querySelector('.del-btn').addEventListener('click', async () => {
     if(!confirm('Delete this task?')) return;
     tasks = tasks.filter(x => x.id !== t.id);
     delete photoCache[t.id];
     await dbDelete('tasks', t.id);
     if(t.hasPhoto) await dbDelete('photos', t.id).catch(()=>{});
+    for(const other of tasks){
+      if(other.prereqIds && other.prereqIds.includes(t.id)){
+        other.prereqIds = other.prereqIds.filter(id => id !== t.id);
+        await dbPut('tasks', other);
+      }
+    }
     renderSpace();
   });
 
@@ -930,14 +982,14 @@ document.getElementById('addBtn').addEventListener('click', () => {
       const space = { id: uid(), name, createdAt: Date.now(), order: Date.now(), reportDate: todayStr() };
       await dbPut('spaces', space);
       for(const [category, task, prereq] of DEFAULT_TASKS){
-        await dbPut('tasks', { id: uid(), spaceId: space.id, category, task, prereq, status:'notstarted', notes:'', startDate:'', endDate:'', hasPhoto:false });
+        await dbPut('tasks', { id: uid(), spaceId: space.id, category, task, prereq, prereqIds:[], status:'notstarted', notes:'', startDate:'', endDate:'', hasPhoto:false });
       }
       showToast('Space created');
       openSpace(space.id);
     });
   } else {
     (async () => {
-      const t = { id: uid(), spaceId: currentSpace.id, category:'New Task', task:'Enter task description', prereq:'', status:'notstarted', notes:'', startDate:'', endDate:'', hasPhoto:false };
+      const t = { id: uid(), spaceId: currentSpace.id, category:'New Task', task:'Enter task description', prereq:'', prereqIds:[], status:'notstarted', notes:'', startDate:'', endDate:'', hasPhoto:false };
       await dbPut('tasks', t);
       tasks.push(t);
       renderSpace();
@@ -985,6 +1037,36 @@ document.getElementById('modalConfirm').addEventListener('click', () => {
   if(modalOnConfirm) modalOnConfirm(val);
 });
 document.getElementById('modalInput').addEventListener('keydown', e => { if(e.key === 'Enter') document.getElementById('modalConfirm').click(); });
+
+/* ================= Dependency picker (structured prerequisites for Timeline/CPM) ================= */
+function openDepPicker(taskId){
+  depPickerTaskId = taskId;
+  const current = tasks.find(t => t.id === taskId);
+  const others = tasks.filter(t => t.id !== taskId);
+  const list = document.getElementById('depPickerList');
+  if(others.length === 0){
+    list.innerHTML = '<div class="empty">No other tasks in this space yet.</div>';
+  } else {
+    list.innerHTML = others.map(t => `
+      <label class="dep-picker-item">
+        <input type="checkbox" value="${t.id}" ${(current.prereqIds||[]).includes(t.id) ? 'checked' : ''}>
+        <span>${escapeHtml(t.task)} <span class="dep-picker-cat">(${escapeHtml(t.category)})</span></span>
+      </label>
+    `).join('');
+  }
+  document.getElementById('depPickerOverlay').classList.add('open');
+}
+document.getElementById('depPickerCancel').addEventListener('click', () => document.getElementById('depPickerOverlay').classList.remove('open'));
+document.getElementById('depPickerConfirm').addEventListener('click', async () => {
+  const checked = [...document.querySelectorAll('#depPickerList input[type=checkbox]:checked')].map(cb => cb.value);
+  const t = tasks.find(x => x.id === depPickerTaskId);
+  if(t){
+    t.prereqIds = checked;
+    await dbPut('tasks', t);
+  }
+  document.getElementById('depPickerOverlay').classList.remove('open');
+  renderSpace();
+});
 
 /* ================= Excel export ================= */
 document.getElementById('exportExcelBtn').addEventListener('click', () => {
@@ -1068,6 +1150,7 @@ document.getElementById('importExcelInput').addEventListener('change', async e =
         category: (category||'').toString().trim() || 'Uncategorized',
         task: descTrim,
         prereq: (prereq||'').toString().trim(),
+        prereqIds: [],
         status: statusKey || 'notstarted',
         notes: (notes||'').toString().trim(),
         startDate: sDate, endDate: eDate, hasPhoto:false
