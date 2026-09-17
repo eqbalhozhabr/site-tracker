@@ -257,6 +257,31 @@
   .report-status-item{ font-size:13.5px; line-height:1.7; margin:0 0 14px; }
   .report-status-item .rt-cat{ font-size:11.5px; color:var(--ink-soft); }
   .report-status-item img{ max-width:260px; max-height:200px; margin-top:6px; border-radius:4px; border:1px solid var(--line); display:block; }
+  .gantt-legend{ display:flex; gap:16px; font-size:12px; color:var(--ink-soft); margin:10px 0 18px; flex-wrap:wrap; }
+  .gantt-swatch{ display:inline-block; width:12px; height:12px; border-radius:2px; margin-inline-end:5px; vertical-align:middle; }
+  .gantt-swatch.gantt-done{ background:var(--green); }
+  .gantt-swatch.gantt-inprogress{ background:var(--amber); }
+  .gantt-swatch.gantt-notstarted{ background:var(--stone); }
+  .gantt-wrap{ display:flex; border:1px solid var(--line); border-radius:4px; overflow:hidden; }
+  .gantt-labels{ flex:0 0 auto; border-inline-end:1px solid var(--line); background:var(--panel); }
+  .gantt-label-header{ height:28px; line-height:28px; font-size:11px; font-weight:700; color:var(--ink-soft); padding:0 10px; border-bottom:1px solid var(--line); background:#efe9d8; box-sizing:border-box; }
+  .gantt-label-row{
+    height:34px; line-height:34px; padding:0 10px; font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    border-bottom:1px solid #eee; box-sizing:border-box;
+  }
+  .gantt-scroll{ overflow-x:auto; flex:1 1 auto; }
+  .gantt-ticks{ position:relative; height:28px; border-bottom:1px solid var(--line); background:#efe9d8; box-sizing:border-box; }
+  .gantt-tick{ position:absolute; top:0; height:28px; line-height:28px; font-size:10.5px; color:var(--ink-soft); padding-inline-start:4px; border-inline-start:1px solid var(--line); white-space:nowrap; box-sizing:border-box; }
+  .gantt-rows{ position:relative; background-image:repeating-linear-gradient(to bottom, transparent 0, transparent 33px, #eee 33px, #eee 34px); }
+  .gantt-bar{
+    position:absolute; height:22px; border-radius:4px; display:flex; align-items:center; overflow:hidden;
+    padding:0 6px; box-sizing:border-box;
+  }
+  .gantt-bar-label{ font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#fff; }
+  .gantt-bar.gantt-done{ background:var(--green); }
+  .gantt-bar.gantt-inprogress{ background:var(--amber); }
+  .gantt-bar.gantt-inprogress .gantt-bar-label{ color:#231c04; }
+  .gantt-bar.gantt-notstarted{ background:var(--stone); }
   @media print{
     /* Print only #reportView: display:none (not visibility:hidden) removes
        the rest of the app from the layout entirely, so the browser paginates
@@ -294,6 +319,7 @@
     <input type="file" id="importExcelInput" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" style="display:none;">
     <button class="tool-btn" id="reportBtn">Generate report</button>
     <button class="tool-btn" id="statusReportBtn">Detailed status report</button>
+    <button class="tool-btn" id="timelineBtn">Timeline (Gantt)</button>
     <button class="tool-btn" id="historyBtn">Report history</button>
     <button class="tool-btn" id="reportDateBtn">Report date</button>
     <button class="tool-btn" id="renameSpaceBtn">Rename space</button>
@@ -472,6 +498,9 @@ function formatDate(d){
   return dt.toLocaleDateString(undefined, { year:'numeric', month:'long', day:'numeric' });
 }
 
+function reportTypeLabel(type){
+  return type === 'status' ? 'Detailed status report' : type === 'timeline' ? 'Timeline (Gantt)' : 'Checklist report';
+}
 function uid(){ return 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
 function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function showToast(msg){
@@ -1146,6 +1175,82 @@ document.getElementById('statusReportBtn').addEventListener('click', async () =>
   await saveReportSnapshot(html, 'status');
   openGeneratedReport(html);
 });
+
+/* ================= Timeline (Gantt) report ================= */
+document.getElementById('timelineBtn').addEventListener('click', async () => {
+  const total = tasks.length;
+  const withDates = tasks.filter(t => t.startDate && t.endDate).sort((a,b) => a.startDate.localeCompare(b.startDate));
+
+  let html = `
+    <div class="report-header">
+      <h1>${escapeHtml(currentSpace.name)} &mdash; Timeline</h1>
+      <div class="meta">Report date: ${formatDate(currentSpace.reportDate || todayStr())} &middot; ${withDates.length} of ${total} tasks have both a start and end date</div>
+    </div>
+  `;
+
+  if(withDates.length === 0){
+    html += `<p class="report-status-empty">No tasks have both a start date and an end date yet, so a timeline can't be drawn. Add dates on the tasks you want to see here, then generate this again.</p>`;
+  } else {
+    const dayMs = 86400000;
+    const minMs = Math.min(...withDates.map(t => new Date(t.startDate+'T00:00:00').getTime()));
+    const maxMs = Math.max(...withDates.map(t => new Date(t.endDate+'T00:00:00').getTime()));
+    const totalDays = Math.max(1, Math.round((maxMs - minMs) / dayMs) + 1);
+    const dayWidth = totalDays > 90 ? 10 : totalDays > 45 ? 16 : 26;
+    const rowHeight = 34;
+    const chartWidth = totalDays * dayWidth;
+    const tickEvery = totalDays > 120 ? 30 : totalDays > 45 ? 14 : totalDays > 14 ? 7 : 1;
+
+    let ticks = '';
+    for(let d = 0; d < totalDays; d += tickEvery){
+      const dt = new Date(minMs + d * dayMs);
+      const label = dt.toLocaleDateString(undefined, { month:'short', day:'numeric' });
+      ticks += `<div class="gantt-tick" style="left:${d*dayWidth}px;">${label}</div>`;
+    }
+
+    let barsHtml = '';
+    let labelsHtml = '';
+    withDates.forEach((t, i) => {
+      const startOffset = Math.round((new Date(t.startDate+'T00:00:00').getTime() - minMs) / dayMs);
+      const endOffset = Math.round((new Date(t.endDate+'T00:00:00').getTime() - minMs) / dayMs);
+      const barWidth = Math.max(dayWidth * 0.7, (endOffset - startOffset + 1) * dayWidth - 2);
+      const barLeft = startOffset * dayWidth + 1;
+      const statusClass = t.status === 'done' ? 'gantt-done' : t.status === 'inprogress' ? 'gantt-inprogress' : 'gantt-notstarted';
+      const top = i * rowHeight + 6;
+      barsHtml += `<div class="gantt-bar ${statusClass}" style="top:${top}px; left:${barLeft}px; width:${barWidth}px;" title="${escapeHtml(t.task)}: ${t.startDate} to ${t.endDate}">
+        <span class="gantt-bar-label">${escapeHtml(t.task)}</span>
+      </div>`;
+      labelsHtml += `<div class="gantt-label-row" title="${escapeHtml(t.task)}">${escapeHtml(t.task)}</div>`;
+    });
+
+    html += `
+      <div class="gantt-legend">
+        <span><span class="gantt-swatch gantt-done"></span>Completed</span>
+        <span><span class="gantt-swatch gantt-inprogress"></span>In progress</span>
+        <span><span class="gantt-swatch gantt-notstarted"></span>Not started</span>
+      </div>
+      <div class="gantt-wrap">
+        <div class="gantt-labels">
+          <div class="gantt-label-header">Task</div>
+          ${labelsHtml}
+        </div>
+        <div class="gantt-scroll">
+          <div style="width:${chartWidth}px;">
+            <div class="gantt-ticks" style="width:${chartWidth}px;">${ticks}</div>
+            <div class="gantt-rows" style="width:${chartWidth}px; height:${withDates.length*rowHeight}px;">${barsHtml}</div>
+          </div>
+        </div>
+      </div>
+    `;
+    const noDatesCount = total - withDates.length;
+    if(noDatesCount > 0){
+      html += `<p class="report-status-empty" style="margin-top:14px;">${noDatesCount} task(s) without both dates are not shown above.</p>`;
+    }
+  }
+
+  await saveReportSnapshot(html, 'timeline');
+  openGeneratedReport(html);
+});
+
 document.getElementById('reportBack').addEventListener('click', () => {
   document.getElementById('reportView').classList.remove('open');
   if(reportBackTarget === 'history') document.getElementById('historyView').classList.add('open');
@@ -1191,6 +1296,31 @@ document.getElementById('reportDownload').addEventListener('click', () => {
     .report-status-item{ font-size:13.5px; line-height:1.7; margin:0 0 14px; }
     .report-status-item .rt-cat{ font-size:11.5px; color:var(--ink-soft); }
     .report-status-item img{ max-width:260px; max-height:200px; margin-top:6px; border-radius:4px; border:1px solid var(--line); display:block; }
+    .gantt-legend{ display:flex; gap:16px; font-size:12px; color:var(--ink-soft); margin:10px 0 18px; flex-wrap:wrap; }
+    .gantt-swatch{ display:inline-block; width:12px; height:12px; border-radius:2px; margin-inline-end:5px; vertical-align:middle; }
+    .gantt-swatch.gantt-done{ background:var(--green); }
+    .gantt-swatch.gantt-inprogress{ background:var(--amber); }
+    .gantt-swatch.gantt-notstarted{ background:var(--stone); }
+    .gantt-wrap{ display:flex; border:1px solid var(--line); border-radius:4px; overflow:hidden; }
+    .gantt-labels{ flex:0 0 auto; border-inline-end:1px solid var(--line); background:var(--panel); }
+    .gantt-label-header{ height:28px; line-height:28px; font-size:11px; font-weight:700; color:var(--ink-soft); padding:0 10px; border-bottom:1px solid var(--line); background:#efe9d8; box-sizing:border-box; }
+    .gantt-label-row{
+      height:34px; line-height:34px; padding:0 10px; font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      border-bottom:1px solid #eee; box-sizing:border-box;
+    }
+    .gantt-scroll{ overflow-x:auto; flex:1 1 auto; }
+    .gantt-ticks{ position:relative; height:28px; border-bottom:1px solid var(--line); background:#efe9d8; box-sizing:border-box; }
+    .gantt-tick{ position:absolute; top:0; height:28px; line-height:28px; font-size:10.5px; color:var(--ink-soft); padding-inline-start:4px; border-inline-start:1px solid var(--line); white-space:nowrap; box-sizing:border-box; }
+    .gantt-rows{ position:relative; background-image:repeating-linear-gradient(to bottom, transparent 0, transparent 33px, #eee 33px, #eee 34px); }
+    .gantt-bar{
+      position:absolute; height:22px; border-radius:4px; display:flex; align-items:center; overflow:hidden;
+      padding:0 6px; box-sizing:border-box;
+    }
+    .gantt-bar-label{ font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#fff; }
+    .gantt-bar.gantt-done{ background:var(--green); }
+    .gantt-bar.gantt-inprogress{ background:var(--amber); }
+    .gantt-bar.gantt-inprogress .gantt-bar-label{ color:#231c04; }
+    .gantt-bar.gantt-notstarted{ background:var(--stone); }
   `;
   const doc = `<!DOCTYPE html>
 <html lang="en">
@@ -1227,7 +1357,7 @@ document.getElementById('historyBtn').addEventListener('click', async () => {
       entries.map(en => `
         <div class="history-item">
           <div>
-            <div class="history-date">${formatDate(en.reportDate)} <span class="history-meta">&middot; ${(en.type||'category') === 'status' ? 'Detailed status report' : 'Checklist report'}</span></div>
+            <div class="history-date">${formatDate(en.reportDate)} <span class="history-meta">&middot; ${reportTypeLabel(en.type||'category')}</span></div>
             <div class="history-meta">Saved ${new Date(en.generatedAt).toLocaleString()}</div>
           </div>
           <button class="history-view-btn" data-id="${en.id}">View report</button>
@@ -1272,7 +1402,7 @@ document.getElementById('exportReportsBtn').addEventListener('click', async () =
   const spaces = await dbGetAll('spaces');
   const allHistory = await dbGetAll('reportHistory');
   if(allHistory.length === 0){
-    alert('There are no saved reports yet. Open a space and tap "Generate report" or "Detailed status report" first.');
+    alert('There are no saved reports yet. Open a space and generate a report (Generate report, Detailed status report, or Timeline) first.');
     return;
   }
   const spaceNameById = Object.fromEntries(spaces.map(s => [s.id, s.name]));
@@ -1308,10 +1438,11 @@ document.getElementById('exportReportsBtn').addEventListener('click', async () =
   groups.forEach((items, spaceName) => {
     listHtml += `<div class="space-group"><h2>${escapeHtml(spaceName)}</h2>`;
     items.forEach(r => {
+      const shortLabel = r.type === 'status' ? 'Detailed status' : r.type === 'timeline' ? 'Timeline' : 'Checklist';
       listHtml += `<a class="report-row" href="#report-${r._idx}">
         <span><span class="rr-date">${formatDate(r.reportDate)}</span>
         <span class="rr-meta">Saved ${new Date(r.generatedAt).toLocaleString()}</span></span>
-        <span class="rr-type${r.type === 'status' ? ' status' : ''}">${r.type === 'status' ? 'Detailed status' : 'Checklist'}</span>
+        <span class="rr-type${r.type ? ' ' + r.type : ''}">${shortLabel}</span>
       </a>`;
     });
     listHtml += `</div>`;
@@ -1348,6 +1479,7 @@ document.getElementById('exportReportsBtn').addEventListener('click', async () =
   .report-row .rr-meta{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; display:block; }
   .report-row .rr-type{ font-size:10.5px; font-weight:700; padding:3px 9px; border-radius:99px; color:#fff; background:var(--stone); flex:0 0 auto; white-space:nowrap; }
   .report-row .rr-type.status{ background:#5b7fb0; }
+  .report-row .rr-type.timeline{ background:#7a5bb0; }
   .report-page-wrap{ display:none; background:#fff; margin:-16px -16px 0; padding:24px 16px 60px; }
   .report-page-wrap:target{ display:block; }
   .report-page-wrap:target ~ #list{ display:none; }
@@ -1372,6 +1504,31 @@ document.getElementById('exportReportsBtn').addEventListener('click', async () =
   .report-status-item{ font-size:13.5px; line-height:1.7; margin:0 0 14px; }
   .report-status-item .rt-cat{ font-size:11.5px; color:var(--ink-soft); }
   .report-status-item img{ max-width:260px; max-height:200px; margin-top:6px; border-radius:4px; border:1px solid var(--line); display:block; }
+  .gantt-legend{ display:flex; gap:16px; font-size:12px; color:var(--ink-soft); margin:10px 0 18px; flex-wrap:wrap; }
+  .gantt-swatch{ display:inline-block; width:12px; height:12px; border-radius:2px; margin-inline-end:5px; vertical-align:middle; }
+  .gantt-swatch.gantt-done{ background:var(--green); }
+  .gantt-swatch.gantt-inprogress{ background:var(--amber); }
+  .gantt-swatch.gantt-notstarted{ background:var(--stone); }
+  .gantt-wrap{ display:flex; border:1px solid var(--line); border-radius:4px; overflow:hidden; }
+  .gantt-labels{ flex:0 0 auto; border-inline-end:1px solid var(--line); background:var(--panel); }
+  .gantt-label-header{ height:28px; line-height:28px; font-size:11px; font-weight:700; color:var(--ink-soft); padding:0 10px; border-bottom:1px solid var(--line); background:#efe9d8; box-sizing:border-box; }
+  .gantt-label-row{
+    height:34px; line-height:34px; padding:0 10px; font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    border-bottom:1px solid #eee; box-sizing:border-box;
+  }
+  .gantt-scroll{ overflow-x:auto; flex:1 1 auto; }
+  .gantt-ticks{ position:relative; height:28px; border-bottom:1px solid var(--line); background:#efe9d8; box-sizing:border-box; }
+  .gantt-tick{ position:absolute; top:0; height:28px; line-height:28px; font-size:10.5px; color:var(--ink-soft); padding-inline-start:4px; border-inline-start:1px solid var(--line); white-space:nowrap; box-sizing:border-box; }
+  .gantt-rows{ position:relative; background-image:repeating-linear-gradient(to bottom, transparent 0, transparent 33px, #eee 33px, #eee 34px); }
+  .gantt-bar{
+    position:absolute; height:22px; border-radius:4px; display:flex; align-items:center; overflow:hidden;
+    padding:0 6px; box-sizing:border-box;
+  }
+  .gantt-bar-label{ font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#fff; }
+  .gantt-bar.gantt-done{ background:var(--green); }
+  .gantt-bar.gantt-inprogress{ background:var(--amber); }
+  .gantt-bar.gantt-inprogress .gantt-bar-label{ color:#231c04; }
+  .gantt-bar.gantt-notstarted{ background:var(--stone); }
 </style>
 </head>
 <body>
