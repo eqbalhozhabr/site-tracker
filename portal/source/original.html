@@ -1,0 +1,1706 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Site Finishing Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg: #eae6dc;
+    --panel: #f6f3ea;
+    --ink: #211d18;
+    --ink-soft: #6b6357;
+    --line: #cfc6b2;
+    --accent: #d9541c;
+    --amber: #e2a100;
+    --green: #4c7a3d;
+    --stone: #9a9080;
+    --danger: #b23a2e;
+    --radius: 3px;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:'Archivo', Arial, sans-serif; font-size:15px; line-height:1.6;
+    -webkit-tap-highlight-color: transparent;
+  }
+  ::selection{ background: var(--accent); color:#fff; }
+  button{ font-family:inherit; }
+
+  /* ---- Header ---- */
+  header.top{
+    background: var(--ink); color:#f2ede0; padding: 16px 16px 14px;
+    position: sticky; top:0; z-index:20; border-bottom: 4px solid var(--accent);
+  }
+  .top-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .top-left{ display:flex; align-items:center; gap:10px; min-width:0; }
+  .back-btn{
+    border:1px solid #4a453a; background:transparent; color:#f2ede0; border-radius:var(--radius);
+    padding:7px 10px; font-size:13px; cursor:pointer; flex:0 0 auto;
+  }
+  header.top h1{ font-size:17px; font-weight:800; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  header.top .sub{ font-size:12px; color:#c9c0ac; margin:2px 0 0; }
+  .progress-wrap{ min-width:100px; text-align:right; flex:0 0 auto; }
+  .progress-num{ font-size:20px; font-weight:900; color:#fff; line-height:1; }
+  .progress-label{ font-size:10.5px; color:#c9c0ac; margin-top:2px;}
+  .bar-track{ margin-top:10px; height:7px; background:#3a352c; border-radius:99px; overflow:hidden; }
+  .bar-fill{ height:100%; background: var(--accent); width:0%; transition: width .35s ease; }
+
+  .toolbar{
+    display:flex; gap:6px; margin-top:10px; flex-wrap:wrap;
+  }
+  .tool-btn{
+    border:1px solid #4a453a; background:#2b271f; color:#f2ede0; font-size:12px; font-weight:600;
+    padding:7px 11px; border-radius:var(--radius); cursor:pointer;
+  }
+  .tool-btn:hover{ border-color: var(--accent); }
+
+  /* ---- Filters ---- */
+  .filters{
+    position:sticky; top:0; z-index:19; background: var(--bg);
+    display:flex; flex-direction:column; gap:8px; padding:10px 16px; border-bottom:1px solid var(--line);
+  }
+  .search-row{ position:relative; }
+  .search-input{
+    width:100%; border:1px solid var(--line); border-radius:var(--radius); padding:8px 32px 8px 12px;
+    font-family:inherit; font-size:13.5px; background:var(--panel); color:var(--ink); box-sizing:border-box;
+  }
+  .search-input:focus{ outline:none; border-color:var(--accent); }
+  .search-clear{
+    position:absolute; inset-inline-end:6px; top:50%; transform:translateY(-50%);
+    border:none; background:none; color:var(--ink-soft); font-size:16px; line-height:1; cursor:pointer; padding:4px; display:none;
+  }
+  .chip-row{ display:flex; gap:6px; overflow-x:auto; }
+  .chip-row::-webkit-scrollbar{ display:none; }
+  .chip{
+    flex:0 0 auto; padding:7px 14px; border:1px solid var(--line); background:var(--panel);
+    color:var(--ink-soft); font-size:12.5px; font-weight:600; border-radius:99px; cursor:pointer; white-space:nowrap;
+  }
+  .chip.active{ background: var(--ink); border-color:var(--ink); color:#fff; }
+
+  main{ padding: 14px 14px 100px; max-width:760px; margin:0 auto; }
+
+  /* ---- Home / space list ---- */
+  .home-sort{
+    position:sticky; top:0; z-index:19; background: var(--bg);
+    display:flex; align-items:center; gap:10px; padding:10px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap;
+  }
+  .home-sort-label{ font-size:12px; color:var(--ink-soft); font-weight:600; flex:0 0 auto; }
+  .home-sort-hint{ font-size:11.5px; color:var(--ink-soft); font-style:italic; flex:0 0 auto; }
+  .space-card{
+    background:var(--panel); border:1px solid var(--line); border-inline-start:5px solid var(--accent);
+    border-radius:var(--radius); padding:14px 16px; margin-bottom:10px; cursor:pointer;
+    display:flex; align-items:center; gap:10px;
+  }
+  .space-card.dragging{ opacity:0.85; box-shadow:0 6px 16px rgba(0,0,0,0.18); }
+  .space-card .drag-handle{
+    flex:0 0 auto; color:var(--ink-soft); font-size:20px; line-height:1; letter-spacing:-2px;
+    padding:10px 6px; margin:-10px -6px; cursor:grab; touch-action:none; user-select:none;
+  }
+  .space-card .drag-handle:active{ cursor:grabbing; }
+  .space-card.selected{ background:#fbe9e0; border-inline-start-color:var(--danger); }
+  .select-circle{
+    flex:0 0 auto; width:22px; height:22px; border-radius:50%; border:2px solid var(--line);
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:900; color:#fff; background:#fff;
+  }
+  .select-circle.checked{ background:var(--danger); border-color:var(--danger); }
+  .space-card .space-card-body{ flex:1; min-width:0; }
+  .space-card h3{ margin:0 0 4px; font-size:16px; }
+  .space-card .meta{ font-size:12px; color:var(--ink-soft); display:flex; justify-content:space-between; gap:10px; }
+  .space-card .mini-bar{ height:5px; background:var(--line); border-radius:99px; margin-top:8px; overflow:hidden;}
+  .space-card .mini-fill{ height:100%; background:var(--green); }
+
+  .cat-heading{
+    font-size:13px; font-weight:700; color:var(--ink-soft); margin: 22px 4px 8px; padding-bottom:6px;
+    border-bottom:2px solid var(--line); display:flex; justify-content:space-between; align-items:center;
+  }
+  .cat-heading:first-child{ margin-top:4px; }
+  .cat-count{ font-weight:500; color:var(--stone); }
+
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-inline-start: 5px solid var(--stone);
+    border-radius: var(--radius); padding: 12px 14px; margin-bottom:10px;
+  }
+  .card.status-inprogress{ border-inline-start-color: var(--amber); }
+  .card.status-done{ border-inline-start-color: var(--green); }
+
+  .card-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .task-title{
+    font-weight:700; font-size:15px; flex:1; background:transparent; border:none; color:var(--ink);
+    font-family:inherit; resize:none; width:100%; padding:0; outline:none;
+  }
+  .del-btn{ border:none; background:transparent; color:var(--stone); font-size:16px; cursor:pointer; padding:2px 4px; line-height:1; }
+  .del-btn:hover{ color:var(--danger); }
+
+  .field-label{ font-size:11px; color:var(--ink-soft); margin: 8px 0 3px; display:block; }
+  .prereq-input, .notes-input, .cat-select{
+    width:100%; border:1px solid var(--line); background:#fff; border-radius:var(--radius);
+    padding:7px 9px; font-family:inherit; font-size:13px; color:var(--ink); outline:none;
+  }
+  .prereq-input, .cat-select{ resize:none; }
+  .notes-input{ resize:vertical; min-height:44px; }
+  .prereq-input:focus, .notes-input:focus, .task-title:focus, .cat-select:focus{ border-color: var(--accent); }
+
+  .dep-chips{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .dep-chip{
+    display:inline-flex; align-items:center; gap:6px; background:#fff; border:1px solid var(--line); border-radius:99px;
+    padding:5px 6px 5px 11px; font-size:12px; color:var(--ink);
+  }
+  .dep-chip .dep-remove{ border:none; background:var(--line); color:var(--ink); border-radius:50%; width:16px; height:16px; font-size:11px; line-height:1; cursor:pointer; padding:0; }
+  .dep-add-btn{
+    border:1px dashed var(--line); background:#fff; color:var(--ink-soft); font-size:12px; padding:6px 11px;
+    border-radius:99px; cursor:pointer;
+  }
+  .dep-add-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .dep-picker-modal{ max-width:420px; }
+  .dep-picker-list{ max-height:320px; overflow-y:auto; margin:12px 0; border:1px solid var(--line); border-radius:var(--radius); }
+  .dep-picker-item{ display:flex; align-items:center; gap:9px; padding:9px 10px; border-bottom:1px solid #eee; font-size:13.5px; cursor:pointer; }
+  .dep-picker-item:last-child{ border-bottom:none; }
+  .dep-picker-cat{ font-size:11.5px; color:var(--ink-soft); }
+
+  .status-row{ display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .status-btn{
+    flex:1; min-width:90px; padding:8px 6px; text-align:center; font-size:12px; font-weight:700;
+    border:1px solid var(--line); background:#fff; color:var(--ink-soft); cursor:pointer; border-radius: var(--radius);
+  }
+  .status-btn[data-s="notstarted"].sel{ background: var(--stone); color:#fff; border-color:var(--stone); }
+  .status-btn[data-s="inprogress"].sel{ background: var(--amber); color:#231c04; border-color:var(--amber); }
+  .status-btn[data-s="done"].sel{ background: var(--green); color:#fff; border-color:var(--green); }
+
+  .date-row{ display:flex; gap:8px; margin-top:10px; }
+  .date-field{ flex:1; }
+  .date-field input{
+    width:100%; border:1px solid var(--line); background:#fff; border-radius:var(--radius);
+    padding:6px 8px; font-family:inherit; font-size:12.5px; color:var(--ink);
+  }
+
+  .photo-row{ margin-top:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .photo-thumb-wrap{ position:relative; display:inline-block; }
+  .photo-thumb{ width:64px; height:64px; object-fit:cover; border-radius:var(--radius); border:1px solid var(--line); cursor:pointer; display:block; }
+  .photo-remove-btn{
+    position:absolute; top:-7px; right:-7px; width:20px; height:20px; border-radius:50%;
+    background:var(--danger); color:#fff; border:2px solid var(--panel); font-size:13px; line-height:1;
+    cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0;
+  }
+  .photo-remove-btn:hover{ opacity:0.85; }
+  .photo-btn{
+    display:inline-flex; align-items:center; gap:6px; border:1px dashed var(--line); background:#fff;
+    color:var(--ink-soft); font-size:12px; padding:8px 12px; border-radius:var(--radius); cursor:pointer;
+  }
+  .photo-btn:hover{ border-color: var(--accent); color:var(--accent); }
+  input[type=file]{ display:none; }
+
+  .add-bar{ position:fixed; bottom:0; right:0; left:0; padding:12px 16px; background:linear-gradient(to top, var(--bg) 60%, transparent); }
+  .add-btn{
+    max-width:760px; margin:0 auto; display:block; width:100%; background: var(--accent); color:#fff; border:none;
+    padding:13px; font-size:14.5px; font-weight:800; border-radius: var(--radius); cursor:pointer;
+  }
+  .add-btn:active{ opacity:0.85; }
+  .add-btn.secondary{ background:var(--ink); }
+  .add-btn.danger{ background:var(--danger); }
+  .add-btn:disabled{ opacity:0.4; cursor:default; }
+
+  .empty{ text-align:center; color:var(--ink-soft); padding:40px 20px; font-size:13.5px; }
+
+  .toast{
+    position:fixed; bottom:74px; left:50%; transform:translateX(-50%); background: var(--ink); color:#fff;
+    padding:9px 18px; border-radius:99px; font-size:12.5px; opacity:0; pointer-events:none; transition:opacity .25s ease; z-index:40;
+  }
+  .toast.show{ opacity:1; }
+
+  .lightbox{ position:fixed; inset:0; background:rgba(20,17,12,0.9); display:none; align-items:center; justify-content:center; z-index:50; padding:20px; }
+  .lightbox.open{ display:flex; }
+  .lightbox img{ max-width:100%; max-height:85vh; border-radius:4px; }
+  .lightbox .close{ position:absolute; top:16px; left:16px; color:#fff; font-size:26px; background:none; border:none; cursor:pointer;}
+
+  .modal-overlay{ position:fixed; inset:0; background:rgba(20,17,12,0.55); display:none; align-items:center; justify-content:center; z-index:60; padding:20px; }
+  .modal-overlay.open{ display:flex; }
+  .modal{ background:var(--panel); border-radius:6px; padding:20px; max-width:380px; width:100%; }
+  .modal h3{ margin:0 0 12px; font-size:16px; }
+  .modal input{ width:100%; border:1px solid var(--line); border-radius:var(--radius); padding:9px 10px; font-family:inherit; font-size:14px; }
+  .modal-actions{ display:flex; gap:8px; margin-top:14px; }
+  .modal-actions button{ flex:1; padding:10px; border-radius:var(--radius); border:none; font-weight:700; cursor:pointer; }
+  .modal-actions .confirm{ background:var(--accent); color:#fff; }
+  .modal-actions .cancel{ background:#e2ddd0; color:var(--ink); }
+
+  /* ---- Report view ---- */
+  #reportView, #historyView{ display:none; background:#fff; }
+  #reportView.open, #historyView.open{ display:block; position:fixed; inset:0; z-index:55; overflow:auto; }
+  .history-item{
+    display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;
+    padding:14px 0; border-bottom:1px solid #eee;
+  }
+  .history-date{ font-weight:700; font-size:14px; }
+  .history-meta{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+  .history-view-btn{
+    border:1px solid var(--line); background:var(--panel); padding:7px 14px; border-radius:var(--radius);
+    cursor:pointer; font-size:12.5px; font-weight:600;
+  }
+  .history-view-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .report-page{ max-width:760px; margin:0 auto; padding:30px 24px 80px; }
+  .report-header{ border-bottom:3px solid var(--ink); padding-bottom:14px; margin-bottom:18px; }
+  .report-header h1{ font-size:22px; margin:0 0 4px; }
+  .report-header .meta{ font-size:12.5px; color:var(--ink-soft); }
+  .report-summary{ display:flex; gap:18px; margin:14px 0 22px; font-size:13px; }
+  .report-cat{ font-size:14px; font-weight:800; margin:22px 0 10px; border-bottom:1px solid var(--line); padding-bottom:6px; }
+  .report-item{ margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid #eee; }
+  .report-item .rt-title{ font-weight:700; font-size:14px; }
+  .report-badge{
+    display:inline-block; font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px; margin-inline-start:8px;
+    color:#fff; vertical-align:middle;
+  }
+  .rb-notstarted{ background:var(--stone); } .rb-inprogress{ background:var(--amber); color:#231c04; } .rb-done{ background:var(--green); }
+  .report-item .rt-line{ font-size:12.5px; color:var(--ink-soft); margin-top:3px; }
+  .report-item img{ max-width:260px; max-height:200px; margin-top:8px; border-radius:4px; border:1px solid var(--line); display:block; }
+  .report-toolbar{
+    position:sticky; top:0; background:#fff; border-bottom:1px solid var(--line); padding:10px 16px;
+    display:flex; gap:8px; justify-content:center; z-index:5;
+  }
+  .report-toolbar button{ border:1px solid var(--line); background:var(--panel); padding:8px 14px; border-radius:var(--radius); cursor:pointer; font-size:13px; font-weight:600; }
+  .report-toolbar button.primary{ background:var(--accent); color:#fff; border-color:var(--accent); }
+  .report-status-section{ margin:26px 0; }
+  .report-status-heading{
+    font-size:15px; font-weight:800; margin:0 0 12px; padding-bottom:6px; border-bottom:2px solid var(--line);
+    display:inline-block; padding-inline-end:10px;
+  }
+  .report-status-heading.sh-done{ color:var(--green); border-color:var(--green); }
+  .report-status-heading.sh-inprogress{ color:#8a6400; border-color:var(--amber); }
+  .report-status-heading.sh-notstarted{ color:var(--ink-soft); border-color:var(--stone); }
+  .report-status-empty{ font-size:13px; color:var(--ink-soft); font-style:italic; }
+  .report-status-item{ font-size:13.5px; line-height:1.7; margin:0 0 14px; }
+  .report-status-item .rt-cat{ font-size:11.5px; color:var(--ink-soft); }
+  .report-status-item img{ max-width:260px; max-height:200px; margin-top:6px; border-radius:4px; border:1px solid var(--line); display:block; }
+  .gantt-legend{ display:flex; gap:16px; font-size:12px; color:var(--ink-soft); margin:10px 0 18px; flex-wrap:wrap; }
+  .gantt-swatch{ display:inline-block; width:12px; height:12px; border-radius:2px; margin-inline-end:5px; vertical-align:middle; }
+  .gantt-swatch.gantt-done{ background:var(--green); }
+  .gantt-swatch.gantt-inprogress{ background:var(--amber); }
+  .gantt-swatch.gantt-notstarted{ background:var(--stone); }
+  .gantt-wrap{ display:flex; border:1px solid var(--line); border-radius:4px; overflow:hidden; }
+  .gantt-labels{ flex:0 0 auto; border-inline-end:1px solid var(--line); background:var(--panel); }
+  .gantt-label-header{ height:28px; line-height:28px; font-size:11px; font-weight:700; color:var(--ink-soft); padding:0 10px; border-bottom:1px solid var(--line); background:#efe9d8; box-sizing:border-box; }
+  .gantt-label-row{
+    height:34px; line-height:34px; padding:0 10px; font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    border-bottom:1px solid #eee; box-sizing:border-box;
+  }
+  .gantt-scroll{ overflow-x:auto; flex:1 1 auto; }
+  .gantt-ticks{ position:relative; height:28px; border-bottom:1px solid var(--line); background:#efe9d8; box-sizing:border-box; }
+  .gantt-tick{ position:absolute; top:0; height:28px; line-height:28px; font-size:10.5px; color:var(--ink-soft); padding-inline-start:4px; border-inline-start:1px solid var(--line); white-space:nowrap; box-sizing:border-box; }
+  .gantt-rows{ position:relative; background-image:repeating-linear-gradient(to bottom, transparent 0, transparent 33px, #eee 33px, #eee 34px); }
+  .gantt-bar{
+    position:absolute; height:22px; border-radius:4px; display:flex; align-items:center; overflow:hidden;
+    padding:0 6px; box-sizing:border-box;
+  }
+  .gantt-bar-label{ font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#fff; }
+  .gantt-bar.gantt-done{ background:var(--green); }
+  .gantt-bar.gantt-inprogress{ background:var(--amber); }
+  .gantt-bar.gantt-inprogress .gantt-bar-label{ color:#231c04; }
+  .gantt-bar.gantt-notstarted{ background:var(--stone); }
+  @media print{
+    /* Print only #reportView: display:none (not visibility:hidden) removes
+       the rest of the app from the layout entirely, so the browser paginates
+       just the report content instead of reserving space for the whole
+       on-screen app and effectively "screenshotting" one giant page. */
+    body > *:not(#reportView){ display:none !important; }
+    #reportView{ position:static !important; }
+    .report-toolbar{ display:none !important; }
+    .report-page{ max-width:none !important; padding:0 !important; }
+    .report-item, .report-status-item{ break-inside:avoid; page-break-inside:avoid; }
+    .report-cat, .report-status-heading{ break-after:avoid; page-break-after:avoid; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top" id="mainHeader">
+  <div class="top-row">
+    <div class="top-left">
+      <button class="back-btn" id="backBtn" style="display:none;">&larr; Spaces</button>
+      <div>
+        <h1 id="headerTitle">Site Finishing Tracker</h1>
+        <p class="sub" id="headerSub">Select or create a space to begin</p>
+      </div>
+    </div>
+    <div class="progress-wrap" id="progressWrap" style="display:none;">
+      <div class="progress-num" id="progressNum">0%</div>
+      <div class="progress-label" id="progressLabel">0 of 0 done</div>
+    </div>
+  </div>
+  <div class="bar-track" id="barTrack" style="display:none;"><div class="bar-fill" id="barFill"></div></div>
+  <div class="toolbar" id="spaceToolbar" style="display:none;">
+    <button class="tool-btn" id="exportExcelBtn">Export Excel</button>
+    <button class="tool-btn" id="importExcelBtn">Import Excel</button>
+    <input type="file" id="importExcelInput" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" style="display:none;">
+    <button class="tool-btn" id="reportBtn">Generate report</button>
+    <button class="tool-btn" id="statusReportBtn">Detailed status report</button>
+    <button class="tool-btn" id="timelineBtn">Timeline (Gantt)</button>
+    <button class="tool-btn" id="historyBtn">Report history</button>
+    <button class="tool-btn" id="reportDateBtn">Report date</button>
+    <button class="tool-btn" id="renameSpaceBtn">Rename space</button>
+  </div>
+  <div class="toolbar" id="homeToolbar">
+    <button class="tool-btn" id="backupBtn">Backup all data (.json)</button>
+    <button class="tool-btn" id="restoreBtn">Restore backup</button>
+    <input type="file" id="restoreInput" accept=".json,application/json,text/plain" style="display:none;">
+    <button class="tool-btn" id="exportReportsBtn">Export all reports (HTML)</button>
+    <button class="tool-btn" id="editSpacesBtn">Edit</button>
+    <button class="tool-btn" id="selectAllBtn" style="display:none;">Select all</button>
+  </div>
+</header>
+
+<div class="home-sort" id="homeSort" style="display:none;">
+  <span class="home-sort-label">Sort:</span>
+  <div class="chip-row">
+    <div class="chip active" data-sort="manual">Manual</div>
+    <div class="chip" data-sort="name">Name</div>
+    <div class="chip" data-sort="reportDate">Report date</div>
+  </div>
+  <span class="home-sort-hint" id="homeSortHint">Drag &#9776; to reorder</span>
+</div>
+
+<div class="filters" id="filters" style="display:none;">
+  <div class="search-row">
+    <input type="text" class="search-input" id="taskSearch" placeholder="Search tasks...">
+    <button class="search-clear" id="searchClear" title="Clear search">&times;</button>
+  </div>
+  <div class="chip-row">
+    <div class="chip active" data-f="all">All</div>
+    <div class="chip" data-f="notstarted">Not started</div>
+    <div class="chip" data-f="inprogress">In progress</div>
+    <div class="chip" data-f="done">Completed</div>
+  </div>
+</div>
+
+<main id="main"></main>
+
+<div class="add-bar" id="addBar">
+  <button class="add-btn" id="addBtn">+ Add new space</button>
+  <button class="add-btn danger" id="deleteSelectedBtn" style="display:none;" disabled>Delete</button>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="lightbox" id="lightbox">
+  <button class="close" id="lbClose">&times;</button>
+  <img id="lbImg" src="" alt="">
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h3 id="modalTitle">New space</h3>
+    <input type="text" id="modalInput" placeholder="e.g. Unit 3 - Kitchen">
+    <div class="modal-actions">
+      <button class="cancel" id="modalCancel">Cancel</button>
+      <button class="confirm" id="modalConfirm">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="depPickerOverlay">
+  <div class="modal dep-picker-modal">
+    <h3>Select dependencies</h3>
+    <div class="dep-picker-list" id="depPickerList"></div>
+    <div class="modal-actions">
+      <button class="cancel" id="depPickerCancel">Cancel</button>
+      <button class="confirm" id="depPickerConfirm">Done</button>
+    </div>
+  </div>
+</div>
+
+<div id="reportView">
+  <div class="report-toolbar">
+    <button id="reportBack">&larr; Back to checklist</button>
+    <button id="reportDownload">Download HTML</button>
+    <button class="primary" id="reportPrint">Print / Save as PDF</button>
+  </div>
+  <div class="report-page" id="reportContent"></div>
+</div>
+
+<div id="historyView">
+  <div class="report-toolbar">
+    <button id="historyBack">&larr; Back to checklist</button>
+  </div>
+  <div class="report-page" id="historyList"></div>
+</div>
+
+<script>
+/* ================= IndexedDB layer ================= */
+const DB_NAME = 'siteTrackerDB';
+const DB_VERSION = 2;
+let db;
+
+function openDB(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = e => {
+      const d = e.target.result;
+      if(!d.objectStoreNames.contains('spaces')) d.createObjectStore('spaces', { keyPath: 'id' });
+      if(!d.objectStoreNames.contains('tasks')){
+        const s = d.createObjectStore('tasks', { keyPath: 'id' });
+        s.createIndex('spaceId', 'spaceId', { unique:false });
+      }
+      if(!d.objectStoreNames.contains('photos')) d.createObjectStore('photos', { keyPath: 'taskId' });
+      if(!d.objectStoreNames.contains('reportHistory')){
+        const h = d.createObjectStore('reportHistory', { keyPath: 'id' });
+        h.createIndex('spaceId', 'spaceId', { unique:false });
+      }
+    };
+    req.onsuccess = e => { db = e.target.result; resolve(db); };
+    req.onerror = e => reject(e.target.error);
+  });
+}
+function tx(store, mode){ return db.transaction(store, mode).objectStore(store); }
+function reqToPromise(req){ return new Promise((res, rej) => { req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+function dbGetAll(store){ return reqToPromise(tx(store,'readonly').getAll()); }
+function dbGetAllByIndex(store, index, key){ return reqToPromise(tx(store,'readonly').index(index).getAll(key)); }
+function dbGet(store, key){ return reqToPromise(tx(store,'readonly').get(key)); }
+function dbPut(store, val){ return reqToPromise(tx(store,'readwrite').put(val)); }
+function dbDelete(store, key){ return reqToPromise(tx(store,'readwrite').delete(key)); }
+
+/* ================= App state ================= */
+const STATUS = { notstarted: 'Not started', inprogress: 'In progress', done: 'Completed' };
+let currentSpace = null;   // {id, name, createdAt}
+let tasks = [];
+let photoCache = {};
+let currentFilter = 'all';
+let currentSearch = '';
+let saveTimers = {};
+let modalOnConfirm = null;
+let depPickerTaskId = null;
+let sortMode = localStorage.getItem('spaceSortMode') || 'manual';
+let reportBackTarget = 'checklist';
+let editMode = false;
+let selectedSpaceIds = new Set();
+
+const DEFAULT_TASKS = [
+["Surface Preparation","Inspect plaster and fix defects (cracks, unevenness)","Plastering fully complete and walls/ceiling dry"],
+["Surface Preparation","Final edge and joint touch-up on plastered walls","Plaster defect inspection complete"],
+["Tiling & Ceramics","Kitchen wall tiling","Rough plumbing (stub-outs) installed and wall prepped"],
+["Tiling & Ceramics","Bathroom and WC wall tiling","Rough plumbing and waterproofing membrane on floor"],
+["Tiling & Ceramics","Floor tiling / ceramics in rooms and corridors","Floor leveling and concrete screed complete"],
+["Tiling & Ceramics","Tile grouting (kitchen, bathrooms, floors)","Tile adhesive fully cured (24-48h after tiling)"],
+["Tiling & Ceramics","Silicone sealing at wet-area joints (tub, sink, countertop)","Grouting complete and fully cured"],
+["Stone Work","Staircase and landing stone work","Structural work and stair concrete complete"],
+["Stone Work","Door and window sill / threshold stone","Door and window frames installed"],
+["Flooring","Parquet / laminate flooring installation","Floor fully dry and wall painting complete"],
+["Flooring","Skirting / baseboard installation","Flooring and wall painting complete"],
+["Drywall & False Ceiling","Gypsum board false ceiling (recessed lighting, spotlights)","Ceiling electrical wiring complete"],
+["Drywall & False Ceiling","Gypsum board partition walls (if required)","Interior partition layout finalized"],
+["Doors & Windows","Install interior door frames / jambs","Plastering and wall preparation complete"],
+["Doors & Windows","Install interior doors","Door frames installed"],
+["Doors & Windows","Install main entrance security door","Entrance door frame installed"],
+["Doors & Windows","Install windows and glazing (UPVC / aluminum)","Exterior facade finishing complete"],
+["Painting","Wall and ceiling filler / putty application","Wall joints finished and plaster dry"],
+["Painting","Primer coat on walls and ceilings","Filler applied and sanded"],
+["Painting","Final top coat on walls and ceilings","Primer coat complete"],
+["Painting","Decorative wall finishes (patina, calligraphy, and murals)","Final top coat on walls and ceilings complete"],
+["Painting","Painting doors and frames","Doors installed"],
+["Electrical","Final-fix electrical: switches and outlets","Rough electrical wiring and wall painting complete"],
+["Electrical","Install ceiling light fixtures","False ceiling and painting complete"],
+["Electrical","Install distribution panel and unit meter","Wiring complete and inspector approval"],
+["Mechanical (Plumbing & HVAC)","Final-fix plumbing and faucet installation","Rough plumbing and tiling complete"],
+["Mechanical (Plumbing & HVAC)","Install kitchen sink and bathroom basin","Cabinets and countertop installed"],
+["Mechanical (Plumbing & HVAC)","Install toilet and bathroom fixtures","Bathroom tiling and plumbing complete"],
+["Mechanical (Plumbing & HVAC)","Install boiler/heater and radiators","Heating pipework and painting complete"],
+["Mechanical (Plumbing & HVAC)","Install split AC / cooling units","Refrigerant line and outdoor unit location prepared"],
+["Cabinetry & Millwork","Install kitchen cabinets","Kitchen tiling and painting complete"],
+["Cabinetry & Millwork","Install kitchen countertop (stone / quartz)","Cabinet carcasses installed"],
+["Cabinetry & Millwork","Install wardrobes and MDF built-ins","Room painting complete"],
+["Miscellaneous Finishing","Install railings and balustrades (balcony, staircase)","Stone work on stairs/balcony complete"],
+["Miscellaneous Finishing","Install mirrors and bathroom vanity stone","Bathroom tiling complete"],
+["Miscellaneous Finishing","Install electric shutters / curtain tracks","Windows installed"],
+["Miscellaneous Finishing","Install video intercom and security cameras","Related wiring done during electrical final-fix"],
+["Cleaning & Handover","Rough clean (after all construction work)","All above works complete"],
+["Cleaning & Handover","Snag list / defect rectification","Joint inspection with supervisor / client"],
+["Cleaning & Handover","Final detailed cleaning","Snag list items resolved"],
+["Cleaning & Handover","Provisional handover to client / owner","Final cleaning and quality approval"],
+["Cleaning & Handover","Final handover and warranty documentation","Provisional handover issues resolved"]
+];
+
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+function formatDate(d){
+  if(!d) return '';
+  const dt = new Date(d + 'T00:00:00');
+  if(isNaN(dt)) return d;
+  return dt.toLocaleDateString(undefined, { year:'numeric', month:'long', day:'numeric' });
+}
+
+function reportTypeLabel(type){
+  return type === 'status' ? 'Detailed status report' : type === 'timeline' ? 'Timeline (Gantt)' : 'Checklist report';
+}
+function uid(){ return 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=> t.classList.remove('show'), 1500);
+}
+
+/* ================= Navigation ================= */
+function showHome(){
+  currentSpace = null; tasks = []; photoCache = {};
+  document.getElementById('backBtn').style.display = 'none';
+  document.getElementById('headerTitle').textContent = 'Site Finishing Tracker';
+  document.getElementById('headerSub').textContent = 'Select or create a space to begin';
+  document.getElementById('progressWrap').style.display = 'none';
+  document.getElementById('barTrack').style.display = 'none';
+  document.getElementById('spaceToolbar').style.display = 'none';
+  document.getElementById('homeToolbar').style.display = 'flex';
+  document.getElementById('filters').style.display = 'none';
+  document.getElementById('addBtn').textContent = '+ Add new space';
+  document.getElementById('reportView').classList.remove('open');
+  document.getElementById('historyView').classList.remove('open');
+  document.getElementById('homeSort').style.display = 'flex';
+  document.querySelectorAll('#homeSort .chip').forEach(c => c.classList.toggle('active', c.dataset.sort === sortMode));
+  document.getElementById('homeSortHint').style.display = sortMode === 'manual' ? 'inline' : 'none';
+  editMode = false;
+  selectedSpaceIds = new Set();
+  updateEditUI();
+  renderHome();
+}
+
+async function updateEditUI(){
+  document.getElementById('editSpacesBtn').textContent = editMode ? 'Done' : 'Edit';
+  document.getElementById('selectAllBtn').style.display = editMode ? 'inline-block' : 'none';
+  document.getElementById('homeSort').style.display = editMode ? 'none' : 'flex';
+  document.getElementById('addBtn').style.display = editMode ? 'none' : 'block';
+  const delBtn = document.getElementById('deleteSelectedBtn');
+  delBtn.style.display = editMode ? 'block' : 'none';
+  delBtn.disabled = selectedSpaceIds.size === 0;
+  delBtn.textContent = selectedSpaceIds.size ? `Delete (${selectedSpaceIds.size})` : 'Delete';
+  if(editMode){
+    const total = (await dbGetAll('spaces')).length;
+    document.getElementById('selectAllBtn').textContent = (total > 0 && selectedSpaceIds.size === total) ? 'Deselect all' : 'Select all';
+  }
+}
+
+async function openSpace(spaceId){
+  const space = await dbGet('spaces', spaceId);
+  if(!space) return;
+  if(!space.reportDate){ space.reportDate = todayStr(); await dbPut('spaces', space); }
+  currentSpace = space;
+  tasks = await dbGetAllByIndex('tasks', 'spaceId', spaceId);
+  photoCache = {};
+  const withPhoto = tasks.filter(t => t.hasPhoto);
+  await Promise.all(withPhoto.map(async t => {
+    const p = await dbGet('photos', t.id);
+    if(p) photoCache[t.id] = p.dataUrl;
+  }));
+  document.getElementById('backBtn').style.display = 'inline-block';
+  document.getElementById('headerTitle').textContent = space.name;
+  document.getElementById('headerSub').textContent = 'Report date: ' + formatDate(space.reportDate);
+  document.getElementById('progressWrap').style.display = 'block';
+  document.getElementById('barTrack').style.display = 'block';
+  document.getElementById('spaceToolbar').style.display = 'flex';
+  document.getElementById('homeToolbar').style.display = 'none';
+  document.getElementById('filters').style.display = 'flex';
+  document.getElementById('addBtn').textContent = '+ Add new task';
+  document.getElementById('reportView').classList.remove('open');
+  document.getElementById('historyView').classList.remove('open');
+  document.getElementById('homeSort').style.display = 'none';
+  currentFilter = 'all';
+  currentSearch = '';
+  document.getElementById('taskSearch').value = '';
+  document.getElementById('searchClear').style.display = 'none';
+  document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.f === 'all'));
+  renderSpace();
+}
+
+/* ================= Home (space list) ================= */
+async function renderHome(){
+  const spaces = await dbGetAll('spaces');
+  const main = document.getElementById('main');
+  main.innerHTML = '';
+  if(spaces.length === 0){
+    main.innerHTML = '<div class="empty">No spaces yet. Tap "+ Add new space" to create your first one (e.g. a room, unit, or floor).</div>';
+    return;
+  }
+  if(sortMode === 'name'){
+    spaces.sort((a,b) => a.name.localeCompare(b.name));
+  } else if(sortMode === 'reportDate'){
+    spaces.sort((a,b) => (b.reportDate||'').localeCompare(a.reportDate||''));
+  } else {
+    spaces.sort((a,b) => (a.order ?? a.createdAt ?? 0) - (b.order ?? b.createdAt ?? 0));
+  }
+  for(const s of spaces){
+    const spaceTasks = await dbGetAllByIndex('tasks', 'spaceId', s.id);
+    const total = spaceTasks.length;
+    const done = spaceTasks.filter(t=>t.status==='done').length;
+    const pct = total ? Math.round((done/total)*100) : 0;
+    const isSelected = selectedSpaceIds.has(s.id);
+    const card = document.createElement('div');
+    card.className = 'space-card' + (isSelected ? ' selected' : '');
+    card.dataset.id = s.id;
+    card.innerHTML = `
+      ${editMode ? `<span class="select-circle${isSelected ? ' checked' : ''}">${isSelected ? '&#10003;' : ''}</span>` : ''}
+      ${!editMode && sortMode === 'manual' ? '<span class="drag-handle">&#9776;</span>' : ''}
+      <div class="space-card-body">
+        <h3>${escapeHtml(s.name)}</h3>
+        <div class="meta"><span>${done} of ${total} done</span><span>${pct}%</span></div>
+        <div class="mini-bar"><div class="mini-fill" style="width:${pct}%"></div></div>
+      </div>
+    `;
+    card.addEventListener('click', () => {
+      if(editMode){
+        if(selectedSpaceIds.has(s.id)) selectedSpaceIds.delete(s.id);
+        else selectedSpaceIds.add(s.id);
+        updateEditUI();
+        renderHome();
+      } else {
+        openSpace(s.id);
+      }
+    });
+    main.appendChild(card);
+  }
+  if(!editMode && sortMode === 'manual') wireDragReorder(main, spaces);
+}
+
+async function deleteSpace(spaceId){
+  const spaceTasks = await dbGetAllByIndex('tasks', 'spaceId', spaceId);
+  for(const t of spaceTasks){
+    await dbDelete('tasks', t.id);
+    if(t.hasPhoto) await dbDelete('photos', t.id).catch(()=>{});
+  }
+  const history = await dbGetAllByIndex('reportHistory', 'spaceId', spaceId);
+  for(const h of history) await dbDelete('reportHistory', h.id);
+  await dbDelete('spaces', spaceId);
+}
+
+function wireDragReorder(main, spaces){
+  // Uses Pointer Events (not the HTML5 Drag and Drop API) because native
+  // drag-and-drop only fires from a mouse - touch screens never trigger
+  // dragstart/dragover/drop, so on mobile the finger just scrolls the page.
+  // Move/up listeners are attached to window for the duration of the drag
+  // (rather than relying on setPointerCapture) so the gesture keeps working
+  // even if the finger slides off the small handle element.
+  const CARD_GAP = 10; // must match .space-card margin-bottom
+  const allCards = () => [...main.querySelectorAll('.space-card')];
+
+  main.querySelectorAll('.space-card').forEach(card => {
+    const handle = card.querySelector('.drag-handle');
+    if(!handle) return;
+
+    handle.addEventListener('click', e => e.stopPropagation());
+
+    handle.addEventListener('pointerdown', e => {
+      if(e.button !== undefined && e.button !== 0) return;
+      e.preventDefault();
+      const pointerId = e.pointerId;
+      const startY = e.clientY;
+      const cardHeight = card.offsetHeight + CARD_GAP;
+      const originalIndex = allCards().indexOf(card);
+      let currentIndex = originalIndex;
+      let moved = false;
+
+      card.classList.add('dragging');
+      card.style.position = 'relative';
+      card.style.zIndex = '10';
+      allCards().forEach(c => { if(c !== card) c.style.transition = 'transform .15s ease'; });
+
+      function onMove(ev){
+        if(ev.pointerId !== pointerId) return;
+        const deltaY = ev.clientY - startY;
+        if(Math.abs(deltaY) > 3) moved = true;
+        card.style.transform = `translateY(${deltaY}px)`;
+        const steps = Math.round(deltaY / cardHeight);
+        const newIndex = Math.min(allCards().length - 1, Math.max(0, originalIndex + steps));
+        if(newIndex !== currentIndex){
+          allCards().forEach((c, i) => {
+            if(c === card) return;
+            let shift = 0;
+            if(newIndex > originalIndex && i > originalIndex && i <= newIndex) shift = -1;
+            else if(newIndex < originalIndex && i >= newIndex && i < originalIndex) shift = 1;
+            c.style.transform = shift ? `translateY(${shift * cardHeight}px)` : '';
+          });
+          currentIndex = newIndex;
+        }
+      }
+
+      async function onUp(ev){
+        if(ev.pointerId !== pointerId) return;
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        window.removeEventListener('pointercancel', onUp);
+        card.classList.remove('dragging');
+        card.style.position = '';
+        card.style.zIndex = '';
+        card.style.transform = '';
+
+        const cards = allCards();
+        const draggedId = card.dataset.id;
+        const ids = cards.filter(c => c !== card).map(c => c.dataset.id);
+        ids.splice(currentIndex, 0, draggedId);
+        cards.forEach(c => { c.style.transform = ''; c.style.transition = ''; });
+
+        if(!moved) return;
+        await Promise.all(ids.map((id, i) => {
+          const sp = spaces.find(s => s.id === id);
+          sp.order = i;
+          return dbPut('spaces', sp);
+        }));
+        showToast('Order updated');
+        renderHome();
+      }
+
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onUp);
+    });
+  });
+}
+
+/* ================= Space checklist ================= */
+function updateProgress(){
+  const total = tasks.length;
+  const done = tasks.filter(t=>t.status==='done').length;
+  const inprog = tasks.filter(t=>t.status==='inprogress').length;
+  const pct = total ? Math.round((done/total)*100) : 0;
+  document.getElementById('progressNum').textContent = pct + '%';
+  document.getElementById('progressLabel').textContent = `${done} of ${total} done`;
+  document.getElementById('barFill').style.width = pct + '%';
+}
+
+function groupByCategory(list){
+  const map = new Map();
+  list.forEach(t => { if(!map.has(t.category)) map.set(t.category, []); map.get(t.category).push(t); });
+  return map;
+}
+
+function renderSpace(){
+  updateProgress();
+  const main = document.getElementById('main');
+  main.innerHTML = '';
+  let filtered = currentFilter === 'all' ? tasks : tasks.filter(t => t.status === currentFilter);
+  if(currentSearch){
+    const q = currentSearch;
+    filtered = filtered.filter(t =>
+      (t.task||'').toLowerCase().includes(q) ||
+      (t.category||'').toLowerCase().includes(q) ||
+      (t.prereq||'').toLowerCase().includes(q) ||
+      (t.notes||'').toLowerCase().includes(q)
+    );
+  }
+  if(filtered.length === 0){
+    main.innerHTML = currentSearch
+      ? '<div class="empty">No tasks match your search.</div>'
+      : '<div class="empty">No tasks in this status.</div>';
+    return;
+  }
+  const groups = groupByCategory(filtered);
+  groups.forEach((items, category) => {
+    const h = document.createElement('div');
+    h.className = 'cat-heading';
+    h.innerHTML = `<span>${escapeHtml(category)}</span><span class="cat-count">${items.length}</span>`;
+    main.appendChild(h);
+    items.forEach(t => main.appendChild(renderCard(t)));
+  });
+}
+
+function scheduleSaveTask(t){
+  clearTimeout(saveTimers[t.id]);
+  saveTimers[t.id] = setTimeout(async () => {
+    try{ await dbPut('tasks', t); }catch(e){ showToast('Save failed'); }
+  }, 400);
+}
+
+function renderCard(t){
+  const card = document.createElement('div');
+  card.className = 'card status-' + t.status;
+  card.dataset.id = t.id;
+  card.innerHTML = `
+    <div class="card-head">
+      <textarea class="task-title" rows="1" data-field="task">${escapeHtml(t.task)}</textarea>
+      <button class="del-btn" title="Delete">&#10005;</button>
+    </div>
+    <input class="cat-select" data-field="category" value="${escapeHtml(t.category)}" placeholder="Category">
+    <label class="field-label">Prerequisite (notes)</label>
+    <textarea class="prereq-input" data-field="prereq" rows="1" placeholder="What needs to be done before this task?">${escapeHtml(t.prereq)}</textarea>
+    <label class="field-label">Depends on (for Timeline)</label>
+    <div class="dep-chips">
+      ${(t.prereqIds||[]).map(depId => {
+        const depTask = tasks.find(x => x.id === depId);
+        return depTask ? `<span class="dep-chip">${escapeHtml(depTask.task)}<button class="dep-remove" data-dep-id="${depId}" title="Remove dependency">&times;</button></span>` : '';
+      }).join('')}
+      <button class="dep-add-btn" type="button">+ Add dependency</button>
+    </div>
+    <div class="status-row">
+      <div class="status-btn" data-s="notstarted">Not started</div>
+      <div class="status-btn" data-s="inprogress">In progress</div>
+      <div class="status-btn" data-s="done">Completed</div>
+    </div>
+    <div class="date-row">
+      <div class="date-field"><label class="field-label">Start date</label><input type="date" data-field="startDate" value="${t.startDate||''}"></div>
+      <div class="date-field"><label class="field-label">End date</label><input type="date" data-field="endDate" value="${t.endDate||''}"></div>
+    </div>
+    <label class="field-label">Final notes</label>
+    <textarea class="notes-input" data-field="notes" placeholder="Notes, defects, or handover remarks...">${escapeHtml(t.notes)}</textarea>
+    <div class="photo-row">
+      ${photoCache[t.id] ? `
+        <div class="photo-thumb-wrap">
+          <img class="photo-thumb" src="${photoCache[t.id]}">
+          <button class="photo-remove-btn" title="Remove photo">&times;</button>
+        </div>
+      ` : ''}
+      <label class="photo-btn">&#128247; ${photoCache[t.id] ? 'Change photo' : 'Add photo'}<input type="file" accept="image/*" class="photo-input"></label>
+    </div>
+  `;
+
+  card.querySelectorAll('.status-btn').forEach(btn => {
+    if(btn.dataset.s === t.status) btn.classList.add('sel');
+    btn.addEventListener('click', () => {
+      t.status = btn.dataset.s;
+      card.className = 'card status-' + t.status;
+      card.querySelectorAll('.status-btn').forEach(b => b.classList.toggle('sel', b.dataset.s === t.status));
+      updateProgress();
+      scheduleSaveTask(t);
+    });
+  });
+  card.querySelector('[data-field="task"]').addEventListener('input', e => { t.task = e.target.value; scheduleSaveTask(t); });
+  card.querySelector('[data-field="category"]').addEventListener('change', e => { t.category = e.target.value || 'Uncategorized'; scheduleSaveTask(t); renderSpace(); });
+  card.querySelector('[data-field="prereq"]').addEventListener('input', e => { t.prereq = e.target.value; scheduleSaveTask(t); });
+  card.querySelector('[data-field="notes"]').addEventListener('input', e => { t.notes = e.target.value; scheduleSaveTask(t); });
+  card.querySelector('[data-field="startDate"]').addEventListener('change', e => { t.startDate = e.target.value; scheduleSaveTask(t); });
+  card.querySelector('[data-field="endDate"]').addEventListener('change', e => { t.endDate = e.target.value; scheduleSaveTask(t); });
+
+  card.querySelector('.dep-add-btn').addEventListener('click', () => openDepPicker(t.id));
+  card.querySelectorAll('.dep-remove').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      t.prereqIds = (t.prereqIds||[]).filter(id => id !== btn.dataset.depId);
+      await dbPut('tasks', t);
+      renderSpace();
+    });
+  });
+
+  card.querySelector('.del-btn').addEventListener('click', async () => {
+    if(!confirm('Delete this task?')) return;
+    tasks = tasks.filter(x => x.id !== t.id);
+    delete photoCache[t.id];
+    await dbDelete('tasks', t.id);
+    if(t.hasPhoto) await dbDelete('photos', t.id).catch(()=>{});
+    for(const other of tasks){
+      if(other.prereqIds && other.prereqIds.includes(t.id)){
+        other.prereqIds = other.prereqIds.filter(id => id !== t.id);
+        await dbPut('tasks', other);
+      }
+    }
+    renderSpace();
+  });
+
+  card.querySelector('.photo-input').addEventListener('change', e => handlePhotoUpload(e, t));
+  const thumb = card.querySelector('.photo-thumb');
+  if(thumb) thumb.addEventListener('click', () => openLightbox(photoCache[t.id]));
+  const removeBtn = card.querySelector('.photo-remove-btn');
+  if(removeBtn) removeBtn.addEventListener('click', async e => {
+    e.stopPropagation();
+    if(!confirm('Remove this photo?')) return;
+    delete photoCache[t.id];
+    t.hasPhoto = false;
+    await dbDelete('photos', t.id).catch(()=>{});
+    await dbPut('tasks', t);
+    renderSpace();
+  });
+
+  return card;
+}
+
+function handlePhotoUpload(e, t){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = evt => {
+    const img = new Image();
+    img.onload = async () => {
+      const maxW = 700;
+      const scale = Math.min(1, maxW / img.width);
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width * scale; canvas.height = img.height * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+      try{
+        await dbPut('photos', { taskId: t.id, dataUrl });
+        photoCache[t.id] = dataUrl;
+        t.hasPhoto = true;
+        await dbPut('tasks', t);
+        renderSpace();
+      }catch(err){ showToast('Photo could not be saved'); }
+    };
+    img.src = evt.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function openLightbox(src){
+  if(!src) return;
+  document.getElementById('lbImg').src = src;
+  document.getElementById('lightbox').classList.add('open');
+}
+document.getElementById('lbClose').addEventListener('click', () => document.getElementById('lightbox').classList.remove('open'));
+document.getElementById('lightbox').addEventListener('click', e => { if(e.target.id === 'lightbox') document.getElementById('lightbox').classList.remove('open'); });
+
+document.getElementById('homeSort').addEventListener('click', e => {
+  const chip = e.target.closest('.chip');
+  if(!chip) return;
+  document.querySelectorAll('#homeSort .chip').forEach(c => c.classList.remove('active'));
+  chip.classList.add('active');
+  sortMode = chip.dataset.sort;
+  localStorage.setItem('spaceSortMode', sortMode);
+  document.getElementById('homeSortHint').style.display = sortMode === 'manual' ? 'inline' : 'none';
+  renderHome();
+});
+document.getElementById('filters').addEventListener('click', e => {
+  const chip = e.target.closest('.chip');
+  if(!chip) return;
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  chip.classList.add('active');
+  currentFilter = chip.dataset.f;
+  renderSpace();
+});
+document.getElementById('taskSearch').addEventListener('input', e => {
+  currentSearch = e.target.value.trim().toLowerCase();
+  document.getElementById('searchClear').style.display = currentSearch ? 'block' : 'none';
+  renderSpace();
+});
+document.getElementById('searchClear').addEventListener('click', () => {
+  const input = document.getElementById('taskSearch');
+  input.value = '';
+  currentSearch = '';
+  document.getElementById('searchClear').style.display = 'none';
+  renderSpace();
+  input.focus();
+});
+
+document.getElementById('backBtn').addEventListener('click', showHome);
+
+/* ================= Add space / add task ================= */
+document.getElementById('addBtn').addEventListener('click', () => {
+  if(!currentSpace){
+    openModal('New space', '', async name => {
+      if(!name) return;
+      const space = { id: uid(), name, createdAt: Date.now(), order: Date.now(), reportDate: todayStr() };
+      await dbPut('spaces', space);
+      for(const [category, task, prereq] of DEFAULT_TASKS){
+        await dbPut('tasks', { id: uid(), spaceId: space.id, category, task, prereq, prereqIds:[], status:'notstarted', notes:'', startDate:'', endDate:'', hasPhoto:false });
+      }
+      showToast('Space created');
+      openSpace(space.id);
+    });
+  } else {
+    (async () => {
+      const t = { id: uid(), spaceId: currentSpace.id, category:'New Task', task:'Enter task description', prereq:'', prereqIds:[], status:'notstarted', notes:'', startDate:'', endDate:'', hasPhoto:false };
+      await dbPut('tasks', t);
+      tasks.push(t);
+      renderSpace();
+      setTimeout(() => {
+        const el = document.querySelector(`.card[data-id="${t.id}"] .task-title`);
+        if(el){ el.focus(); el.select(); el.scrollIntoView({behavior:'smooth', block:'center'}); }
+      }, 50);
+    })();
+  }
+});
+
+document.getElementById('renameSpaceBtn').addEventListener('click', () => {
+  openModal('Rename space', currentSpace.name, async name => {
+    if(!name) return;
+    currentSpace.name = name;
+    await dbPut('spaces', currentSpace);
+    document.getElementById('headerTitle').textContent = name;
+  });
+});
+
+document.getElementById('reportDateBtn').addEventListener('click', () => {
+  openModal('Report date', currentSpace.reportDate || todayStr(), async val => {
+    if(!val) return;
+    currentSpace.reportDate = val;
+    await dbPut('spaces', currentSpace);
+    document.getElementById('headerSub').textContent = 'Report date: ' + formatDate(val);
+  }, 'date');
+});
+
+/* ================= Modal ================= */
+function openModal(title, initial, onConfirm, type){
+  document.getElementById('modalTitle').textContent = title;
+  const input = document.getElementById('modalInput');
+  input.type = type || 'text';
+  input.placeholder = type === 'date' ? '' : 'e.g. Unit 3 - Kitchen';
+  input.value = initial;
+  modalOnConfirm = onConfirm;
+  document.getElementById('modalOverlay').classList.add('open');
+  setTimeout(() => input.focus(), 50);
+}
+document.getElementById('modalCancel').addEventListener('click', () => document.getElementById('modalOverlay').classList.remove('open'));
+document.getElementById('modalConfirm').addEventListener('click', () => {
+  const val = document.getElementById('modalInput').value.trim();
+  document.getElementById('modalOverlay').classList.remove('open');
+  if(modalOnConfirm) modalOnConfirm(val);
+});
+document.getElementById('modalInput').addEventListener('keydown', e => { if(e.key === 'Enter') document.getElementById('modalConfirm').click(); });
+
+/* ================= Dependency picker (structured prerequisites for Timeline/CPM) ================= */
+function openDepPicker(taskId){
+  depPickerTaskId = taskId;
+  const current = tasks.find(t => t.id === taskId);
+  const others = tasks.filter(t => t.id !== taskId);
+  const list = document.getElementById('depPickerList');
+  if(others.length === 0){
+    list.innerHTML = '<div class="empty">No other tasks in this space yet.</div>';
+  } else {
+    list.innerHTML = others.map(t => `
+      <label class="dep-picker-item">
+        <input type="checkbox" value="${t.id}" ${(current.prereqIds||[]).includes(t.id) ? 'checked' : ''}>
+        <span>${escapeHtml(t.task)} <span class="dep-picker-cat">(${escapeHtml(t.category)})</span></span>
+      </label>
+    `).join('');
+  }
+  document.getElementById('depPickerOverlay').classList.add('open');
+}
+document.getElementById('depPickerCancel').addEventListener('click', () => document.getElementById('depPickerOverlay').classList.remove('open'));
+document.getElementById('depPickerConfirm').addEventListener('click', async () => {
+  const checked = [...document.querySelectorAll('#depPickerList input[type=checkbox]:checked')].map(cb => cb.value);
+  const t = tasks.find(x => x.id === depPickerTaskId);
+  if(t){
+    t.prereqIds = checked;
+    await dbPut('tasks', t);
+  }
+  document.getElementById('depPickerOverlay').classList.remove('open');
+  renderSpace();
+});
+
+/* ================= Excel export ================= */
+document.getElementById('exportExcelBtn').addEventListener('click', () => {
+  const rows = [['No.','Category / Phase','Task Description','Prerequisite','Status','Start Date','End Date','Final Notes']];
+  tasks.forEach((t,i) => rows.push([i+1, t.category, t.task, t.prereq, STATUS[t.status], t.startDate||'', t.endDate||'', t.notes||'']));
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:5},{wch:22},{wch:36},{wch:34},{wch:14},{wch:12},{wch:12},{wch:38}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Checklist');
+  const safeName = currentSpace.name.replace(/[^a-z0-9\-_]+/gi, '_');
+  XLSX.writeFile(wb, `${safeName}-checklist.xlsx`);
+  showToast('Excel file downloaded');
+});
+
+/* ================= Excel import ================= */
+const STATUS_FROM_LABEL = { 'not started':'notstarted', 'in progress':'inprogress', 'completed':'done', 'done':'done' };
+function parseStatusCell(v){
+  const s = (v||'').toString().trim().toLowerCase();
+  return STATUS_FROM_LABEL[s] || null;
+}
+function parseDateCell(v){
+  if(v instanceof Date && !isNaN(v)) return v.toISOString().slice(0,10);
+  if(typeof v === 'string'){
+    const s = v.trim();
+    if(!s) return '';
+    if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const d = new Date(s);
+    if(!isNaN(d)) return d.toISOString().slice(0,10);
+    return '';
+  }
+  return '';
+}
+
+document.getElementById('importExcelBtn').addEventListener('click', () => document.getElementById('importExcelInput').click());
+document.getElementById('importExcelInput').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if(!file) return;
+  let rows;
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type:'array', cellDates:true });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
+  }catch(err){
+    alert('This file could not be read as an Excel checklist.');
+    return;
+  }
+  const dataRows = rows.slice(1).filter(r => r.some(c => (c||'').toString().trim() !== ''));
+  if(dataRows.length === 0){
+    alert('No task rows were found in this file. Make sure it uses the same columns as "Export Excel" (No. / Category / Task Description / Prerequisite / Status / Start Date / End Date / Final Notes).');
+    return;
+  }
+  if(!confirm(`This will update matching tasks (by description) and add any new ones found in "${file.name}" (${dataRows.length} row(s)). Continue?`)) return;
+
+  const usedIds = new Set();
+  let updated = 0, created = 0, skipped = 0;
+  for(const row of dataRows){
+    const [, category, taskDesc, prereq, statusText, startDate, endDate, notes] = row;
+    const descTrim = (taskDesc||'').toString().trim();
+    if(!descTrim){ skipped++; continue; }
+    const statusKey = parseStatusCell(statusText);
+    const sDate = parseDateCell(startDate);
+    const eDate = parseDateCell(endDate);
+    const match = tasks.find(t => !usedIds.has(t.id) && t.task.trim().toLowerCase() === descTrim.toLowerCase());
+
+    if(match){
+      usedIds.add(match.id);
+      match.category = (category||'').toString().trim() || 'Uncategorized';
+      match.task = descTrim;
+      match.prereq = (prereq||'').toString().trim();
+      if(statusKey) match.status = statusKey;
+      match.startDate = sDate;
+      match.endDate = eDate;
+      match.notes = (notes||'').toString().trim();
+      await dbPut('tasks', match);
+      updated++;
+    } else {
+      const newTask = {
+        id: uid(), spaceId: currentSpace.id,
+        category: (category||'').toString().trim() || 'Uncategorized',
+        task: descTrim,
+        prereq: (prereq||'').toString().trim(),
+        prereqIds: [],
+        status: statusKey || 'notstarted',
+        notes: (notes||'').toString().trim(),
+        startDate: sDate, endDate: eDate, hasPhoto:false
+      };
+      await dbPut('tasks', newTask);
+      tasks.push(newTask);
+      created++;
+    }
+  }
+  renderSpace();
+  showToast(`Import complete: ${updated} updated, ${created} added${skipped ? ', ' + skipped + ' skipped' : ''}`);
+});
+
+/* ================= Printable report ================= */
+async function saveReportSnapshot(html, type){
+  const existing = await dbGetAllByIndex('reportHistory', 'spaceId', currentSpace.id);
+  const match = existing.find(h => h.reportDate === currentSpace.reportDate && (h.type||'category') === type);
+  const entry = match || { id: uid(), spaceId: currentSpace.id, reportDate: currentSpace.reportDate, type };
+  entry.html = html;
+  entry.generatedAt = Date.now();
+  await dbPut('reportHistory', entry);
+}
+
+function openGeneratedReport(html){
+  document.getElementById('reportContent').innerHTML = html;
+  reportBackTarget = 'checklist';
+  document.getElementById('reportBack').textContent = '← Back to checklist';
+  document.getElementById('reportView').classList.add('open');
+  window.scrollTo(0,0);
+}
+
+document.getElementById('reportBtn').addEventListener('click', async () => {
+  const total = tasks.length;
+  const done = tasks.filter(t=>t.status==='done').length;
+  const inprog = tasks.filter(t=>t.status==='inprogress').length;
+  const notstarted = tasks.filter(t=>t.status==='notstarted').length;
+  const groups = groupByCategory(tasks);
+
+  let html = `
+    <div class="report-header">
+      <h1>${escapeHtml(currentSpace.name)} &mdash; Finishing Report</h1>
+      <div class="meta">Report date: ${formatDate(currentSpace.reportDate || todayStr())} &middot; ${total} tasks</div>
+    </div>
+    <div class="report-summary">
+      <span><b>${done}</b> completed</span>
+      <span><b>${inprog}</b> in progress</span>
+      <span><b>${notstarted}</b> not started</span>
+    </div>
+  `;
+  groups.forEach((items, category) => {
+    html += `<div class="report-cat">${escapeHtml(category)}</div>`;
+    items.forEach(t => {
+      const badgeClass = t.status === 'done' ? 'rb-done' : t.status === 'inprogress' ? 'rb-inprogress' : 'rb-notstarted';
+      html += `<div class="report-item">
+        <div class="rt-title">${escapeHtml(t.task)}<span class="report-badge ${badgeClass}">${STATUS[t.status]}</span></div>
+        ${t.prereq ? `<div class="rt-line"><b>Prerequisite:</b> ${escapeHtml(t.prereq)}</div>` : ''}
+        ${t.startDate ? `<div class="rt-line"><b>Start date:</b> ${t.startDate}</div>` : ''}
+        ${t.endDate ? `<div class="rt-line"><b>End date:</b> ${t.endDate}</div>` : ''}
+        ${t.notes ? `<div class="rt-line"><b>Notes:</b> ${escapeHtml(t.notes)}</div>` : ''}
+        ${photoCache[t.id] ? `<img src="${photoCache[t.id]}">` : ''}
+      </div>`;
+    });
+  });
+  await saveReportSnapshot(html, 'category');
+  openGeneratedReport(html);
+});
+
+/* ================= Detailed status (narrative) report ================= */
+document.getElementById('statusReportBtn').addEventListener('click', async () => {
+  const total = tasks.length;
+  const sections = [
+    { key:'done', title:'Completed', className:'sh-done' },
+    { key:'inprogress', title:'In Progress', className:'sh-inprogress' },
+    { key:'notstarted', title:'Not Started', className:'sh-notstarted' },
+  ];
+
+  let html = `
+    <div class="report-header">
+      <h1>${escapeHtml(currentSpace.name)} &mdash; Detailed Status Report</h1>
+      <div class="meta">Report date: ${formatDate(currentSpace.reportDate || todayStr())} &middot; ${total} tasks</div>
+    </div>
+  `;
+  sections.forEach(sec => {
+    const items = tasks.filter(t => t.status === sec.key);
+    html += `<div class="report-status-section">
+      <h2 class="report-status-heading ${sec.className}">${sec.title} (${items.length})</h2>`;
+    if(items.length === 0){
+      html += `<p class="report-status-empty">No tasks in this status.</p>`;
+    } else {
+      items.forEach(t => {
+        const parts = [];
+        if(t.prereq) parts.push(`Prerequisite: ${escapeHtml(t.prereq)}.`);
+        if(t.startDate) parts.push(`Started ${t.startDate}.`);
+        if(t.endDate) parts.push(`Finished ${t.endDate}.`);
+        if(t.notes) parts.push(`Notes: ${escapeHtml(t.notes)}.`);
+        html += `<p class="report-status-item">
+          <b>${escapeHtml(t.task)}</b> <span class="rt-cat">(${escapeHtml(t.category)})</span>.
+          ${parts.join(' ')}
+          ${photoCache[t.id] ? `<br><img src="${photoCache[t.id]}">` : ''}
+        </p>`;
+      });
+    }
+    html += `</div>`;
+  });
+  await saveReportSnapshot(html, 'status');
+  openGeneratedReport(html);
+});
+
+/* ================= Timeline (Gantt) report ================= */
+document.getElementById('timelineBtn').addEventListener('click', async () => {
+  const total = tasks.length;
+  const withDates = tasks.filter(t => t.startDate && t.endDate).sort((a,b) => a.startDate.localeCompare(b.startDate));
+
+  let html = `
+    <div class="report-header">
+      <h1>${escapeHtml(currentSpace.name)} &mdash; Timeline</h1>
+      <div class="meta">Report date: ${formatDate(currentSpace.reportDate || todayStr())} &middot; ${withDates.length} of ${total} tasks have both a start and end date</div>
+    </div>
+  `;
+
+  if(withDates.length === 0){
+    html += `<p class="report-status-empty">No tasks have both a start date and an end date yet, so a timeline can't be drawn. Add dates on the tasks you want to see here, then generate this again.</p>`;
+  } else {
+    const dayMs = 86400000;
+    const minMs = Math.min(...withDates.map(t => new Date(t.startDate+'T00:00:00').getTime()));
+    const maxMs = Math.max(...withDates.map(t => new Date(t.endDate+'T00:00:00').getTime()));
+    const totalDays = Math.max(1, Math.round((maxMs - minMs) / dayMs) + 1);
+    const dayWidth = totalDays > 90 ? 10 : totalDays > 45 ? 16 : 26;
+    const rowHeight = 34;
+    const chartWidth = totalDays * dayWidth;
+    const tickEvery = totalDays > 120 ? 30 : totalDays > 45 ? 14 : totalDays > 14 ? 7 : 1;
+
+    let ticks = '';
+    for(let d = 0; d < totalDays; d += tickEvery){
+      const dt = new Date(minMs + d * dayMs);
+      const label = dt.toLocaleDateString(undefined, { month:'short', day:'numeric' });
+      ticks += `<div class="gantt-tick" style="left:${d*dayWidth}px;">${label}</div>`;
+    }
+
+    let barsHtml = '';
+    let labelsHtml = '';
+    withDates.forEach((t, i) => {
+      const startOffset = Math.round((new Date(t.startDate+'T00:00:00').getTime() - minMs) / dayMs);
+      const endOffset = Math.round((new Date(t.endDate+'T00:00:00').getTime() - minMs) / dayMs);
+      const barWidth = Math.max(dayWidth * 0.7, (endOffset - startOffset + 1) * dayWidth - 2);
+      const barLeft = startOffset * dayWidth + 1;
+      const statusClass = t.status === 'done' ? 'gantt-done' : t.status === 'inprogress' ? 'gantt-inprogress' : 'gantt-notstarted';
+      const top = i * rowHeight + 6;
+      barsHtml += `<div class="gantt-bar ${statusClass}" style="top:${top}px; left:${barLeft}px; width:${barWidth}px;" title="${escapeHtml(t.task)}: ${t.startDate} to ${t.endDate}">
+        <span class="gantt-bar-label">${escapeHtml(t.task)}</span>
+      </div>`;
+      labelsHtml += `<div class="gantt-label-row" title="${escapeHtml(t.task)}">${escapeHtml(t.task)}</div>`;
+    });
+
+    html += `
+      <div class="gantt-legend">
+        <span><span class="gantt-swatch gantt-done"></span>Completed</span>
+        <span><span class="gantt-swatch gantt-inprogress"></span>In progress</span>
+        <span><span class="gantt-swatch gantt-notstarted"></span>Not started</span>
+      </div>
+      <div class="gantt-wrap">
+        <div class="gantt-labels">
+          <div class="gantt-label-header">Task</div>
+          ${labelsHtml}
+        </div>
+        <div class="gantt-scroll">
+          <div style="width:${chartWidth}px;">
+            <div class="gantt-ticks" style="width:${chartWidth}px;">${ticks}</div>
+            <div class="gantt-rows" style="width:${chartWidth}px; height:${withDates.length*rowHeight}px;">${barsHtml}</div>
+          </div>
+        </div>
+      </div>
+    `;
+    const noDatesCount = total - withDates.length;
+    if(noDatesCount > 0){
+      html += `<p class="report-status-empty" style="margin-top:14px;">${noDatesCount} task(s) without both dates are not shown above.</p>`;
+    }
+  }
+
+  await saveReportSnapshot(html, 'timeline');
+  openGeneratedReport(html);
+});
+
+document.getElementById('reportBack').addEventListener('click', () => {
+  document.getElementById('reportView').classList.remove('open');
+  if(reportBackTarget === 'history') document.getElementById('historyView').classList.add('open');
+  reportBackTarget = 'checklist';
+});
+document.getElementById('reportPrint').addEventListener('click', () => window.print());
+
+document.getElementById('reportDownload').addEventListener('click', () => {
+  const contentHtml = document.getElementById('reportContent').innerHTML;
+  const titleEl = document.getElementById('reportContent').querySelector('h1');
+  const title = titleEl ? titleEl.textContent : (currentSpace ? currentSpace.name + ' — Report' : 'Report');
+  const standaloneCss = `
+    :root{ --ink:#211d18; --ink-soft:#6b6357; --line:#cfc6b2; --panel:#f6f3ea; --accent:#d9541c;
+      --amber:#e2a100; --green:#4c7a3d; --stone:#9a9080; }
+    *{ box-sizing:border-box; }
+    body{
+      font-family:'Archivo',Arial,sans-serif; font-size:15px; line-height:1.6; color:var(--ink);
+      background:#fff; margin:0; padding:30px 24px 60px; max-width:760px; margin-inline:auto;
+    }
+    .report-header{ border-bottom:3px solid var(--ink); padding-bottom:14px; margin-bottom:18px; }
+    .report-header h1{ font-size:22px; margin:0 0 4px; }
+    .report-header .meta{ font-size:12.5px; color:var(--ink-soft); }
+    .report-summary{ display:flex; gap:18px; margin:14px 0 22px; font-size:13px; flex-wrap:wrap; }
+    .report-cat{ font-size:14px; font-weight:800; margin:22px 0 10px; border-bottom:1px solid var(--line); padding-bottom:6px; }
+    .report-item{ margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid #eee; }
+    .report-item .rt-title{ font-weight:700; font-size:14px; }
+    .report-badge{
+      display:inline-block; font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px;
+      margin-inline-start:8px; color:#fff; vertical-align:middle;
+    }
+    .rb-notstarted{ background:var(--stone); } .rb-inprogress{ background:var(--amber); color:#231c04; } .rb-done{ background:var(--green); }
+    .report-item .rt-line{ font-size:12.5px; color:var(--ink-soft); margin-top:3px; }
+    .report-item img{ max-width:260px; max-height:200px; margin-top:8px; border-radius:4px; border:1px solid var(--line); display:block; }
+    .report-status-section{ margin:26px 0; }
+    .report-status-heading{
+      font-size:15px; font-weight:800; margin:0 0 12px; padding-bottom:6px; border-bottom:2px solid var(--line);
+      display:inline-block; padding-inline-end:10px;
+    }
+    .report-status-heading.sh-done{ color:var(--green); border-color:var(--green); }
+    .report-status-heading.sh-inprogress{ color:#8a6400; border-color:var(--amber); }
+    .report-status-heading.sh-notstarted{ color:var(--ink-soft); border-color:var(--stone); }
+    .report-status-empty{ font-size:13px; color:var(--ink-soft); font-style:italic; }
+    .report-status-item{ font-size:13.5px; line-height:1.7; margin:0 0 14px; }
+    .report-status-item .rt-cat{ font-size:11.5px; color:var(--ink-soft); }
+    .report-status-item img{ max-width:260px; max-height:200px; margin-top:6px; border-radius:4px; border:1px solid var(--line); display:block; }
+    .gantt-legend{ display:flex; gap:16px; font-size:12px; color:var(--ink-soft); margin:10px 0 18px; flex-wrap:wrap; }
+    .gantt-swatch{ display:inline-block; width:12px; height:12px; border-radius:2px; margin-inline-end:5px; vertical-align:middle; }
+    .gantt-swatch.gantt-done{ background:var(--green); }
+    .gantt-swatch.gantt-inprogress{ background:var(--amber); }
+    .gantt-swatch.gantt-notstarted{ background:var(--stone); }
+    .gantt-wrap{ display:flex; border:1px solid var(--line); border-radius:4px; overflow:hidden; }
+    .gantt-labels{ flex:0 0 auto; border-inline-end:1px solid var(--line); background:var(--panel); }
+    .gantt-label-header{ height:28px; line-height:28px; font-size:11px; font-weight:700; color:var(--ink-soft); padding:0 10px; border-bottom:1px solid var(--line); background:#efe9d8; box-sizing:border-box; }
+    .gantt-label-row{
+      height:34px; line-height:34px; padding:0 10px; font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      border-bottom:1px solid #eee; box-sizing:border-box;
+    }
+    .gantt-scroll{ overflow-x:auto; flex:1 1 auto; }
+    .gantt-ticks{ position:relative; height:28px; border-bottom:1px solid var(--line); background:#efe9d8; box-sizing:border-box; }
+    .gantt-tick{ position:absolute; top:0; height:28px; line-height:28px; font-size:10.5px; color:var(--ink-soft); padding-inline-start:4px; border-inline-start:1px solid var(--line); white-space:nowrap; box-sizing:border-box; }
+    .gantt-rows{ position:relative; background-image:repeating-linear-gradient(to bottom, transparent 0, transparent 33px, #eee 33px, #eee 34px); }
+    .gantt-bar{
+      position:absolute; height:22px; border-radius:4px; display:flex; align-items:center; overflow:hidden;
+      padding:0 6px; box-sizing:border-box;
+    }
+    .gantt-bar-label{ font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#fff; }
+    .gantt-bar.gantt-done{ background:var(--green); }
+    .gantt-bar.gantt-inprogress{ background:var(--amber); }
+    .gantt-bar.gantt-inprogress .gantt-bar-label{ color:#231c04; }
+    .gantt-bar.gantt-notstarted{ background:var(--stone); }
+  `;
+  const doc = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${escapeHtml(title)}</title>
+<style>${standaloneCss}</style>
+</head>
+<body>
+${contentHtml}
+</body>
+</html>`;
+  const blob = new Blob([doc], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const safeName = (currentSpace ? currentSpace.name : 'report').replace(/[^a-z0-9\-_]+/gi, '_');
+  a.href = url; a.download = `${safeName}-report-${todayStr()}.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Report HTML downloaded');
+});
+
+/* ================= Report history ================= */
+document.getElementById('historyBtn').addEventListener('click', async () => {
+  const entries = await dbGetAllByIndex('reportHistory', 'spaceId', currentSpace.id);
+  entries.sort((a,b) => (b.reportDate||'').localeCompare(a.reportDate||'') || b.generatedAt - a.generatedAt);
+  const list = document.getElementById('historyList');
+  if(entries.length === 0){
+    list.innerHTML = `<h1 style="font-size:20px;margin:0 0 6px;">${escapeHtml(currentSpace.name)} &mdash; Report History</h1>
+      <div class="empty">No saved reports yet. Tap "Generate report" to create and save one.</div>`;
+  } else {
+    list.innerHTML = `<h1 style="font-size:20px;margin:0 0 14px;">${escapeHtml(currentSpace.name)} &mdash; Report History</h1>` +
+      entries.map(en => `
+        <div class="history-item">
+          <div>
+            <div class="history-date">${formatDate(en.reportDate)} <span class="history-meta">&middot; ${reportTypeLabel(en.type||'category')}</span></div>
+            <div class="history-meta">Saved ${new Date(en.generatedAt).toLocaleString()}</div>
+          </div>
+          <button class="history-view-btn" data-id="${en.id}">View report</button>
+        </div>
+      `).join('');
+  }
+  document.getElementById('historyView').classList.add('open');
+  window.scrollTo(0,0);
+});
+document.getElementById('historyList').addEventListener('click', async e => {
+  const btn = e.target.closest('.history-view-btn');
+  if(!btn) return;
+  const entry = await dbGet('reportHistory', btn.dataset.id);
+  if(!entry) return;
+  document.getElementById('reportContent').innerHTML = entry.html;
+  reportBackTarget = 'history';
+  document.getElementById('reportBack').textContent = '← Back to history';
+  document.getElementById('historyView').classList.remove('open');
+  document.getElementById('reportView').classList.add('open');
+  window.scrollTo(0,0);
+});
+document.getElementById('historyBack').addEventListener('click', () => document.getElementById('historyView').classList.remove('open'));
+
+/* ================= Backup / restore all data ================= */
+document.getElementById('backupBtn').addEventListener('click', async () => {
+  const spaces = await dbGetAll('spaces');
+  const allTasks = await dbGetAll('tasks');
+  const allPhotos = await dbGetAll('photos');
+  const allHistory = await dbGetAll('reportHistory');
+  const payload = { version:2, exportedAt: new Date().toISOString(), spaces, tasks: allTasks, photos: allPhotos, reportHistory: allHistory };
+  const blob = new Blob([JSON.stringify(payload)], { type:'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `site-tracker-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Backup downloaded');
+});
+
+/* ================= Export all reports as a standalone browsable HTML file ================= */
+document.getElementById('exportReportsBtn').addEventListener('click', async () => {
+  const spaces = await dbGetAll('spaces');
+  const allHistory = await dbGetAll('reportHistory');
+  if(allHistory.length === 0){
+    alert('There are no saved reports yet. Open a space and generate a report (Generate report, Detailed status report, or Timeline) first.');
+    return;
+  }
+  const spaceNameById = Object.fromEntries(spaces.map(s => [s.id, s.name]));
+  const reports = allHistory
+    .map(h => ({
+      spaceName: spaceNameById[h.spaceId] || 'Unknown space',
+      reportDate: h.reportDate,
+      type: h.type || 'category',
+      generatedAt: h.generatedAt,
+      html: h.html
+    }))
+    .sort((a,b) => a.spaceName.localeCompare(b.spaceName) || (b.reportDate||'').localeCompare(a.reportDate||''));
+
+  // Pure static HTML/CSS navigation (:target), no JavaScript at all - a
+  // JS-driven version previously showed only the header and nothing else
+  // on mobile: large downloaded HTML files often open in a lightweight
+  // "Quick Look"-style preview (notably on iOS) that renders markup but
+  // never executes <script>, and even in a real mobile browser a single
+  // multi-megabyte inline script can fail to parse silently. Anchor links
+  // plus :target work in any renderer that understands HTML/CSS at all.
+  const groups = new Map();
+  reports.forEach((r, i) => { r._idx = i; if(!groups.has(r.spaceName)) groups.set(r.spaceName, []); groups.get(r.spaceName).push(r); });
+
+  let reportPages = '';
+  reports.forEach(r => {
+    reportPages += `<div id="report-${r._idx}" class="report-page-wrap">
+      <a href="#list" class="back-link">&larr; Back to reports</a>
+      <div class="report-page">${r.html}</div>
+    </div>`;
+  });
+
+  let listHtml = '';
+  groups.forEach((items, spaceName) => {
+    listHtml += `<div class="space-group"><h2>${escapeHtml(spaceName)}</h2>`;
+    items.forEach(r => {
+      const shortLabel = r.type === 'status' ? 'Detailed status' : r.type === 'timeline' ? 'Timeline' : 'Checklist';
+      listHtml += `<a class="report-row" href="#report-${r._idx}">
+        <span><span class="rr-date">${formatDate(r.reportDate)}</span>
+        <span class="rr-meta">Saved ${new Date(r.generatedAt).toLocaleString()}</span></span>
+        <span class="rr-type${r.type ? ' ' + r.type : ''}">${shortLabel}</span>
+      </a>`;
+    });
+    listHtml += `</div>`;
+  });
+
+  const doc = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Site Finishing Tracker &mdash; Reports</title>
+<style>
+  :root{ --ink:#211d18; --ink-soft:#6b6357; --line:#cfc6b2; --panel:#f6f3ea; --bg:#eae6dc; --accent:#d9541c;
+    --amber:#e2a100; --green:#4c7a3d; --stone:#9a9080; }
+  *{ box-sizing:border-box; }
+  body{ font-family:'Archivo',Arial,sans-serif; font-size:15px; line-height:1.6; color:var(--ink); background:var(--bg); margin:0; }
+  header{ background:var(--ink); color:#f2ede0; padding:16px; border-bottom:4px solid var(--accent); }
+  header h1{ font-size:18px; margin:0; }
+  header .sub{ font-size:12px; color:#c9c0ac; margin:4px 0 0; }
+  .back-link{
+    display:inline-block; border:1px solid #4a453a; background:transparent; color:var(--ink); border-radius:3px;
+    padding:7px 10px; font-size:13px; text-decoration:none; margin-bottom:14px;
+  }
+  main{ max-width:760px; margin:0 auto; padding:16px; }
+  .space-group{ margin-bottom:26px; }
+  .space-group h2{ font-size:15px; border-bottom:2px solid var(--line); padding-bottom:6px; margin:0 0 10px; }
+  .report-row{
+    background:var(--panel); border:1px solid var(--line); border-inline-start:4px solid var(--accent); border-radius:3px;
+    padding:12px 14px; margin-bottom:8px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:10px;
+    text-decoration:none; color:inherit;
+  }
+  .report-row:hover{ border-color:var(--accent); }
+  .report-row .rr-date{ font-weight:700; font-size:14px; display:block; }
+  .report-row .rr-meta{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; display:block; }
+  .report-row .rr-type{ font-size:10.5px; font-weight:700; padding:3px 9px; border-radius:99px; color:#fff; background:var(--stone); flex:0 0 auto; white-space:nowrap; }
+  .report-row .rr-type.status{ background:#5b7fb0; }
+  .report-row .rr-type.timeline{ background:#7a5bb0; }
+  .report-page-wrap{ display:none; background:#fff; margin:-16px -16px 0; padding:24px 16px 60px; }
+  .report-page-wrap:target{ display:block; }
+  .report-page-wrap:target ~ #list{ display:none; }
+  #list{ display:block; }
+  .report-header{ border-bottom:3px solid var(--ink); padding-bottom:14px; margin-bottom:18px; }
+  .report-header h1{ font-size:22px; margin:0 0 4px; }
+  .report-header .meta{ font-size:12.5px; color:var(--ink-soft); }
+  .report-summary{ display:flex; gap:18px; margin:14px 0 22px; font-size:13px; flex-wrap:wrap; }
+  .report-cat{ font-size:14px; font-weight:800; margin:22px 0 10px; border-bottom:1px solid var(--line); padding-bottom:6px; }
+  .report-item{ margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid #eee; }
+  .report-item .rt-title{ font-weight:700; font-size:14px; }
+  .report-badge{ display:inline-block; font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px; margin-inline-start:8px; color:#fff; vertical-align:middle; }
+  .rb-notstarted{ background:var(--stone); } .rb-inprogress{ background:var(--amber); color:#231c04; } .rb-done{ background:var(--green); }
+  .report-item .rt-line{ font-size:12.5px; color:var(--ink-soft); margin-top:3px; }
+  .report-item img{ max-width:260px; max-height:200px; margin-top:8px; border-radius:4px; border:1px solid var(--line); display:block; }
+  .report-status-section{ margin:26px 0; }
+  .report-status-heading{ font-size:15px; font-weight:800; margin:0 0 12px; padding-bottom:6px; border-bottom:2px solid var(--line); display:inline-block; padding-inline-end:10px; }
+  .report-status-heading.sh-done{ color:var(--green); border-color:var(--green); }
+  .report-status-heading.sh-inprogress{ color:#8a6400; border-color:var(--amber); }
+  .report-status-heading.sh-notstarted{ color:var(--ink-soft); border-color:var(--stone); }
+  .report-status-empty{ font-size:13px; color:var(--ink-soft); font-style:italic; }
+  .report-status-item{ font-size:13.5px; line-height:1.7; margin:0 0 14px; }
+  .report-status-item .rt-cat{ font-size:11.5px; color:var(--ink-soft); }
+  .report-status-item img{ max-width:260px; max-height:200px; margin-top:6px; border-radius:4px; border:1px solid var(--line); display:block; }
+  .gantt-legend{ display:flex; gap:16px; font-size:12px; color:var(--ink-soft); margin:10px 0 18px; flex-wrap:wrap; }
+  .gantt-swatch{ display:inline-block; width:12px; height:12px; border-radius:2px; margin-inline-end:5px; vertical-align:middle; }
+  .gantt-swatch.gantt-done{ background:var(--green); }
+  .gantt-swatch.gantt-inprogress{ background:var(--amber); }
+  .gantt-swatch.gantt-notstarted{ background:var(--stone); }
+  .gantt-wrap{ display:flex; border:1px solid var(--line); border-radius:4px; overflow:hidden; }
+  .gantt-labels{ flex:0 0 auto; border-inline-end:1px solid var(--line); background:var(--panel); }
+  .gantt-label-header{ height:28px; line-height:28px; font-size:11px; font-weight:700; color:var(--ink-soft); padding:0 10px; border-bottom:1px solid var(--line); background:#efe9d8; box-sizing:border-box; }
+  .gantt-label-row{
+    height:34px; line-height:34px; padding:0 10px; font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    border-bottom:1px solid #eee; box-sizing:border-box;
+  }
+  .gantt-scroll{ overflow-x:auto; flex:1 1 auto; }
+  .gantt-ticks{ position:relative; height:28px; border-bottom:1px solid var(--line); background:#efe9d8; box-sizing:border-box; }
+  .gantt-tick{ position:absolute; top:0; height:28px; line-height:28px; font-size:10.5px; color:var(--ink-soft); padding-inline-start:4px; border-inline-start:1px solid var(--line); white-space:nowrap; box-sizing:border-box; }
+  .gantt-rows{ position:relative; background-image:repeating-linear-gradient(to bottom, transparent 0, transparent 33px, #eee 33px, #eee 34px); }
+  .gantt-bar{
+    position:absolute; height:22px; border-radius:4px; display:flex; align-items:center; overflow:hidden;
+    padding:0 6px; box-sizing:border-box;
+  }
+  .gantt-bar-label{ font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#fff; }
+  .gantt-bar.gantt-done{ background:var(--green); }
+  .gantt-bar.gantt-inprogress{ background:var(--amber); }
+  .gantt-bar.gantt-inprogress .gantt-bar-label{ color:#231c04; }
+  .gantt-bar.gantt-notstarted{ background:var(--stone); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Site Finishing Tracker &mdash; Reports</h1>
+  <p class="sub">${reports.length} saved report(s)</p>
+</header>
+<main>
+${reportPages}
+  <div id="list">
+${listHtml}
+  </div>
+</main>
+</body>
+</html>`;
+  const blob = new Blob([doc], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `site-tracker-reports-${todayStr()}.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast(`${reports.length} report(s) exported`);
+});
+
+document.getElementById('restoreBtn').addEventListener('click', () => document.getElementById('restoreInput').click());
+document.getElementById('restoreInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async evt => {
+    let payload;
+    try{
+      payload = JSON.parse(evt.target.result);
+    }catch(err){
+      alert('This file could not be read as a valid backup (not valid JSON).');
+      return;
+    }
+    if(!payload || !Array.isArray(payload.spaces) || !Array.isArray(payload.tasks)){
+      alert('This file does not look like a Site Finishing Tracker backup.');
+      return;
+    }
+    if(!confirm(`This will add ${payload.spaces.length} space(s) from the backup. Continue?`)) return;
+    try{
+      for(const s of payload.spaces) await dbPut('spaces', s);
+      for(const t of payload.tasks) await dbPut('tasks', t);
+      for(const p of (payload.photos||[])) await dbPut('photos', p);
+      for(const h of (payload.reportHistory||[])) await dbPut('reportHistory', h);
+      showToast('Backup restored');
+      renderHome();
+    }catch(err){ alert('Restore failed while saving data: ' + err.message); }
+  };
+  reader.onerror = () => alert('This file could not be read.');
+  reader.readAsText(file);
+});
+
+/* ================= Edit / delete spaces ================= */
+document.getElementById('editSpacesBtn').addEventListener('click', () => {
+  editMode = !editMode;
+  selectedSpaceIds = new Set();
+  updateEditUI();
+  renderHome();
+});
+document.getElementById('selectAllBtn').addEventListener('click', async () => {
+  const spaces = await dbGetAll('spaces');
+  if(selectedSpaceIds.size === spaces.length){
+    selectedSpaceIds = new Set();
+  } else {
+    selectedSpaceIds = new Set(spaces.map(s => s.id));
+  }
+  updateEditUI();
+  renderHome();
+});
+document.getElementById('deleteSelectedBtn').addEventListener('click', async () => {
+  const n = selectedSpaceIds.size;
+  if(n === 0) return;
+  if(!confirm(`Delete ${n} space${n > 1 ? 's' : ''}? This removes all of its tasks, photos, and report history. This cannot be undone.`)) return;
+  for(const id of selectedSpaceIds) await deleteSpace(id);
+  showToast(`${n} space${n > 1 ? 's' : ''} deleted`);
+  editMode = false;
+  selectedSpaceIds = new Set();
+  updateEditUI();
+  renderHome();
+});
+
+/* ================= Init ================= */
+openDB().then(showHome).catch(() => {
+  document.getElementById('main').innerHTML = '<div class="empty">This browser does not support the storage this app needs. Please use a recent version of Chrome, Safari, Firefox, or Edge.</div>';
+});
+</script>
+</body>
+</html>
+
