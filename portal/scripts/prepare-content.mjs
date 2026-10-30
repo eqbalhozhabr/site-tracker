@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 fs.mkdirSync('content',{recursive:true});
-const accessUi='<script>'+fs.readFileSync('source/access-ui.js','utf8')+'</script>';
+const accessUi='<style>'+fs.readFileSync('source/access-ui.css','utf8')+'</style><script>'+fs.readFileSync('source/access-ui.js','utf8')+'</script>';
 function appendBeforeBodyEnd(html,addition){const index=html.lastIndexOf('</body>');if(index<0)throw new Error('Page closing body was not found.');return html.slice(0,index)+addition+html.slice(index);}
 let source = fs.readFileSync('source/original.html','utf8');
 const start = source.indexOf('/* ================= IndexedDB layer');
@@ -27,6 +27,7 @@ source=source.replace('</style>', '.portal-nav{display:flex;align-items:center;g
 source=source.replace("'This browser does not support the storage this app needs. Please use a recent version of Chrome, Safari, Firefox, or Edge.'", "'Online storage is unavailable. Please reload and try again.'");
 source=source.replace('This browser does not support the storage this app needs. Please use a recent version of Chrome, Safari, Firefox, or Edge.','Online storage is unavailable. Please reload and try again.');
 source=source.replace('openDB().then(showHome)', `openDB().then(async () => { const id = new URLSearchParams(location.search).get('space'); if(id) await openSpace(id); else showHome(); })`);
+source=source.replace('const entry = match || { id: uid(),', 'const entry = { id: uid(),');
 // Historical report imports are untrusted HTML. Isolate them while preserving their content.
 source=source.replace("document.getElementById('reportContent').innerHTML = entry.html;", "const frame = document.createElement('iframe'); frame.setAttribute('sandbox',''); frame.title='Saved report'; frame.style.cssText='width:100%;height:75vh;border:0'; frame.srcdoc='<style>body{font:14px Arial;padding:20px}img{max-width:100%}</style>'+entry.html; document.getElementById('reportContent').replaceChildren(frame);");
 fs.writeFileSync('content/workspace.ts','export default '+JSON.stringify(appendBeforeBodyEnd(source,accessUi))+';\n');

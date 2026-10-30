@@ -70,6 +70,7 @@ export function createFiveSHandler(env){return async request=>{try{
    return json({id,total,classification:classify(total),criticalHse:critical},201);
  }
  if(route[0]==='actions'&&route[1]&&request.method==='PATCH'){
+   assertAdmin(user);
    const old=await env.DB.prepare('SELECT * FROM corrective_actions WHERE id=?').bind(route[1]).first();requireValue(old,'Corrective action not found.',404);assertInspect(user,old.project_id);
    const data=await body(request);requireValue(Number.isInteger(data.revision)&&data.revision===old.revision,'This action changed. Reload before saving.',409);
    requireValue(['Open','In Progress','Closed'].includes(data.status),'Invalid action status.');

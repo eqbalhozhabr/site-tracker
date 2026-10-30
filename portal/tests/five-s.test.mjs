@@ -52,11 +52,11 @@ test('photo uploads validate contents and remain private to authorized projects'
 });
 test('corrective action closing requires notes, records audit, and rejects stale revisions',async()=>{
  const c=setup();try{const result=await (await submit(c,'manager-a',{issues:[issue()]})).json();const detail=await (await c.handle(c.request('/api/5s/inspections/'+result.id))).json(),action=detail.actions[0],path='/api/5s/actions/'+action.id;
- assert.equal((await c.handle(c.request(path,{method:'PATCH',userId:'supervisor-a',data:{revision:1,status:'Closed',closureNotes:''}}))).status,400);
+ assert.equal((await c.handle(c.request(path,{method:'PATCH',userId:'admin',data:{revision:1,status:'Closed',closureNotes:''}}))).status,400);
  assert.equal((await c.handle(c.request(path,{method:'PATCH',userId:'supervisor-a',data:{revision:1,status:'In Progress',responsiblePerson:'Changed owner'}}))).status,403);
  assert.equal((await c.handle(c.request(path,{method:'PATCH',userId:'management',data:{revision:1,status:'Closed',closureNotes:'Done'}}))).status,403);
- const saved=await c.handle(c.request(path,{method:'PATCH',userId:'supervisor-a',data:{revision:1,status:'Closed',closureNotes:'Signage installed and checked'}}));assert.equal(saved.status,200);
- assert.equal((await c.handle(c.request(path,{method:'PATCH',userId:'manager-a',data:{revision:1,status:'Open'}}))).status,409);
+ const saved=await c.handle(c.request(path,{method:'PATCH',userId:'admin',data:{revision:1,status:'Closed',closureNotes:'Signage installed and checked'}}));assert.equal(saved.status,200);
+ assert.equal((await c.handle(c.request(path,{method:'PATCH',userId:'admin',data:{revision:1,status:'Open'}}))).status,409);
  const after=await (await c.handle(c.request('/api/5s/inspections/'+result.id))).json();assert.equal(after.inspection.total,80);assert.equal(after.actions[0].status,'Closed');assert.equal(after.actions[0].revision,2);assert.equal(after.history.length,2);
  }finally{c.close()}
 });
@@ -73,7 +73,7 @@ test('legacy API enforces assignments for lists, direct IDs, photos and write op
  assert.equal((await c.legacy(c.request('/api/data?store=photos&id=task-b',{userId:'manager-a'}))).status,403);
  assert.equal((await c.legacy(c.request('/api/data?store=tasks',{method:'PUT',userId:'management',data:{id:'task-a',spaceId:'project-a',status:'done'}}))).status,403);
  assert.equal((await c.legacy(c.request('/api/data?store=tasks',{method:'PUT',userId:'supervisor-a',data:{id:'task-a',spaceId:'project-a',status:'done'}}))).status,403);
- assert.equal((await c.legacy(c.request('/api/data?store=tasks',{method:'PUT',userId:'manager-a',data:{id:'task-a',spaceId:'project-a',status:'inprogress'}}))).status,200);
+ assert.equal((await c.legacy(c.request('/api/data?store=tasks',{method:'PUT',userId:'manager-a',data:{id:'task-a',spaceId:'project-a',status:'inprogress'}}))).status,403);
  assert.equal((await c.legacy(c.request('/api/data?store=tasks',{method:'PUT',userId:'manager-a',data:{id:'task-b',spaceId:'project-a',status:'done'}}))).status,403);
  }finally{c.close()}
 });
@@ -95,12 +95,12 @@ test('cross-origin mutations and unauthorized CSV reads are rejected',async()=>{
 test('after photographs are attached to closure, retained, and cannot be replaced with before evidence',async()=>{
  const c=setup();try{
    const png=new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,0,1]);
-   const upload=async kind=>(await (await c.handle(c.request('/api/5s/photos?projectId=project-a&categoryId=hse&kind='+kind,{method:'POST',userId:'manager-a',headers:{'Content-Type':'image/png'},bytes:png}))).json()).id;
-   const before=await upload('before'),result=await (await submit(c,'manager-a',{issues:[issue({beforePhotos:[before]})]})).json();
+   const upload=async kind=>(await (await c.handle(c.request('/api/5s/photos?projectId=project-a&categoryId=hse&kind='+kind,{method:'POST',userId:'admin',headers:{'Content-Type':'image/png'},bytes:png}))).json()).id;
+   const before=await upload('before'),result=await (await submit(c,'admin',{issues:[issue({beforePhotos:[before]})]})).json();
    const detail=await (await c.handle(c.request('/api/5s/inspections/'+result.id))).json(),id=detail.actions[0].id,path='/api/5s/actions/'+id;
-   assert.equal((await c.handle(c.request(path,{method:'PATCH',userId:'manager-a',data:{revision:1,status:'Closed',closureNotes:'Completed',afterPhotos:[before]}}))).status,400);
-   const after=await upload('after');assert.equal((await c.handle(c.request(path,{method:'PATCH',userId:'manager-a',data:{revision:1,status:'Closed',closureNotes:'Rectified and photographed',afterPhotos:[after]}}))).status,200);
-   assert.equal((await c.handle(c.request(path,{method:'PATCH',userId:'manager-a',data:{revision:2,status:'Closed',closureNotes:'Updated',afterPhotos:[]}}))).status,400);
+   assert.equal((await c.handle(c.request(path,{method:'PATCH',userId:'admin',data:{revision:1,status:'Closed',closureNotes:'Completed',afterPhotos:[before]}}))).status,400);
+   const after=await upload('after');assert.equal((await c.handle(c.request(path,{method:'PATCH',userId:'admin',data:{revision:1,status:'Closed',closureNotes:'Rectified and photographed',afterPhotos:[after]}}))).status,200);
+   assert.equal((await c.handle(c.request(path,{method:'PATCH',userId:'admin',data:{revision:2,status:'Closed',closureNotes:'Updated',afterPhotos:[]}}))).status,400);
    assert.equal(c.sqlite.prepare('SELECT inspection_id FROM evidence WHERE id=?').get(after).inspection_id,result.id);
  }finally{c.close()}
 });
@@ -122,4 +122,50 @@ test('5S migration preserves every legacy record and does not rebuild or drop ex
    db.exec(migration);assert.equal(db.prepare("SELECT payload FROM records WHERE id='old-project'").get().payload,payload);
    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('inspections','corrective_actions','evidence','inspection_audit','site_users','project_members')").get().n,6);
  }finally{db.close()}
+});
+
+
+test('only administrators rename projects, update saved records and delete; teams may add new reports',async()=>{
+ const c=setup();try{
+  const project={id:'project-a',name:'Project A',reportDate:'2026-10-23',order:7,custom:'retained'};
+  await c.env.DB.prepare("UPDATE records SET payload=? WHERE store='spaces' AND id='project-a'").bind(JSON.stringify(project)).run();
+  c.record('visits',{id:'existing-visit',spaceId:'project-a',date:'2026-10-23',inspector:'First',observations:'Original',outcome:'On track'});
+  c.record('reportHistory',{id:'existing-report',spaceId:'project-a',html:'Original report'});
+  c.record('tasks',{id:'existing-task',spaceId:'project-a',status:'done'});
+  for(const userId of ['manager-a','supervisor-a','management']){
+   assert.equal((await c.legacy(c.request('/api/data?store=spaces',{method:'PUT',userId,data:{...project,name:'Unauthorized'}}))).status,403);
+   for(const [store,id,data] of [['visits','existing-visit',{spaceId:'project-a',date:'2026-10-23',inspector:'Changed',observations:'Changed',outcome:'On track'}],['reportHistory','existing-report',{spaceId:'project-a',html:'Changed'}],['tasks','existing-task',{spaceId:'project-a',status:'notstarted'}]]){
+    assert.equal((await c.legacy(c.request('/api/data?store='+store,{method:'PUT',userId,data:{...data,id}}))).status,403);
+    assert.equal((await c.legacy(c.request('/api/data?store='+store+'&id='+id,{method:'DELETE',userId}))).status,403);
+   }
+   assert.equal((await c.legacy(c.request('/api/data?store=spaces&id=project-a',{method:'DELETE',userId}))).status,403);
+  }
+  for(const userId of ['manager-a','supervisor-a']){
+   const visit={id:'new-'+userId,spaceId:'project-a',date:'2026-10-23',inspector:userId,observations:'New',outcome:'On track'};
+   assert.equal((await c.legacy(c.request('/api/data?store=visits',{method:'PUT',userId,data:visit}))).status,200);
+   assert.equal((await c.legacy(c.request('/api/data?store=visits',{method:'PUT',userId,data:{...visit,observations:'overwrite'}}))).status,403);
+   assert.equal((await c.legacy(c.request('/api/data?store=reportHistory',{method:'PUT',userId,data:{id:'report-'+userId,spaceId:'project-a',html:'New'}}))).status,200);
+   assert.equal((await c.legacy(c.request('/api/data?store=reportHistory',{method:'PUT',userId,data:{id:'other-'+userId,spaceId:'project-b',html:'New'}}))).status,403);
+  }
+  assert.equal((await c.legacy(c.request('/api/data?store=spaces',{method:'PUT',data:{...project,name:'Renamed project'}}))).status,200);
+  const renamed=await (await c.legacy(c.request('/api/data?store=spaces&id=project-a'))).json();assert.deepEqual(renamed,{...project,name:'Renamed project'});
+  assert.equal((await c.legacy(c.request('/api/data?store=visits&id=existing-visit',{method:'DELETE'}))).status,200);
+ }finally{c.close()}
+});
+
+test('non-admin simultaneous report creation cannot overwrite an existing report',async()=>{
+ const c=setup();try{
+  const responses=await Promise.all(['First','Second'].map(html=>c.legacy(c.request('/api/data?store=reportHistory',{method:'PUT',userId:'supervisor-a',data:{id:'same-report',spaceId:'project-a',html}}))));
+  assert.equal(responses.filter(r=>r.status===200).length,1);assert.ok(responses.some(r=>[403,409].includes(r.status)));
+  assert.equal(c.sqlite.prepare("SELECT COUNT(*) AS n FROM records WHERE store='reportHistory' AND id='same-report'").get().n,1);
+ }finally{c.close()}
+});
+
+test('all non-admin roles are forbidden from editing corrective actions while new inspections remain allowed',async()=>{
+ const c=setup();try{
+  const result=await (await submit(c,'supervisor-a',{issues:[issue()]})).json();const action=c.sqlite.prepare('SELECT * FROM corrective_actions WHERE inspection_id=?').get(result.id);
+  for(const userId of ['manager-a','supervisor-a','management'])assert.equal((await c.handle(c.request('/api/5s/actions/'+action.id,{method:'PATCH',userId,data:{revision:1,status:'Closed',closureNotes:'Unauthorized'}}))).status,403);
+  assert.equal(c.sqlite.prepare('SELECT status FROM corrective_actions WHERE id=?').get(action.id).status,'Open');
+  assert.equal((await c.handle(c.request('/api/5s/actions/'+action.id,{method:'PATCH',data:{revision:1,status:'Closed',closureNotes:'Admin checked'}}))).status,200);
+ }finally{c.close()}
 });

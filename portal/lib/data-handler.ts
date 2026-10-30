@@ -1,6 +1,6 @@
 const stores = new Set(['spaces', 'tasks', 'photos', 'reportHistory', 'visits']);
 const json = (value: unknown, status = 200) => Response.json(value, {status, headers:{'Cache-Control':'no-store'}});
-export function createDataHandler(env: { DB?: D1Database, BUCKET?: R2Bucket }) {
+export function createDataHandler(env: { DB?: D1Database, BUCKET?: R2Bucket }, {createOnly=false}={}) {
 async function handle(request: Request) {
   try {
     const url = new URL(request.url), store = url.searchParams.get('store') || '', id = url.searchParams.get('id');
@@ -27,7 +27,7 @@ async function handle(request: Request) {
       if (!data || typeof data !== 'object' || Array.isArray(data)) return json({error:'Invalid record'},400);
       const key = store === 'photos' ? data.taskId : data.id;
       if (typeof key !== 'string' || !/^[a-zA-Z0-9_-]{1,160}$/.test(key)) return json({error:'Invalid record ID'},400);
-      if (store === 'spaces' && (typeof data.name !== 'string' || !data.name.trim())) return json({error:'A project name is required.'},400);
+      if (store === 'spaces' && (typeof data.name !== 'string' || !data.name.trim() || data.name.trim().length>200)) return json({error:'A project name is required.'},400);
       if (store === 'visits' && (!data.spaceId || !data.date || !data.inspector || !data.observations)) return json({error:'Project, date, inspector and observations are required.'},400);
       if (data.spaceId && (typeof data.spaceId !== 'string' || !/^[a-zA-Z0-9_-]{1,160}$/.test(data.spaceId))) return json({error:'Invalid project ID'},400);
       for (const field of ['date','nextDate','startDate','endDate','reportDate']) {
@@ -42,7 +42,8 @@ async function handle(request: Request) {
         await env.BUCKET.put(objectKey,raw,{httpMetadata:{contentType:'application/json'}});
         payload = JSON.stringify({taskId:key,key:objectKey});
       }
-      await env.DB.prepare('INSERT INTO records (store,id,space_id,payload,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(store,id) DO UPDATE SET space_id=excluded.space_id,payload=excluded.payload,updated_at=excluded.updated_at').bind(store,key,data.spaceId || null,payload,new Date().toISOString()).run();
+      const saved = await env.DB.prepare('INSERT INTO records (store,id,space_id,payload,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(store,id) '+(createOnly?'DO NOTHING':'DO UPDATE SET space_id=excluded.space_id,payload=excluded.payload,updated_at=excluded.updated_at')).bind(store,key,data.spaceId || null,payload,new Date().toISOString()).run();
+      if(createOnly && saved.meta.changes===0) return json({error:'This record already exists. Only administrators can edit it.'},409);
       return json({id:key});
     }
     if (request.method === 'DELETE') {

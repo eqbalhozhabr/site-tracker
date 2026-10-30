@@ -4,7 +4,7 @@
 
 The GitHub `main` inspected for this change is `6ba7e36ffe8fe016274db9636aa4d68ea1f14c7b`. It contains only `index.html` and `site-tracker-multi-space.html`; it has no backend, authentication service, database migration tooling, build configuration or deployment workflow. The original `index.html` uses IndexedDB `siteTrackerDB` version 2, with `spaces`, `tasks`, `photos` and `reportHistory` stores. These are browser records, not GitHub data.
 
-The reporting workflow is manual: select a space, update task statuses, dates, dependencies, notes and photographs, choose a report date, and generate a checklist, detailed status or Gantt report. Saved snapshots are keyed by space/date/report type. Excel import/export, JSON backup/restore and standalone report export are existing features. There is no automatic weekly scheduler to preserve.
+The reporting workflow is manual: select a space, update task statuses, dates, dependencies, notes and photographs, choose a report date, and generate a checklist, detailed status or Gantt report. Saved snapshots retain space/date/report type and append a new record on each generation. Excel import/export, JSON backup/restore and standalone report export are existing features. There is no automatic weekly scheduler to preserve.
 
 The previous development session created an integrated portal locally using the Sites Vinext starter. It adds project overview, visits and a report library. It was not in GitHub `main` and was not published. This feature therefore brings that existing portal into the same repository under `portal/`, while leaving both original root HTML files unchanged. Production serves the portal at the site's root and the original field interface at `/workspace`, rather than hosting a separate 5S application.
 
@@ -42,9 +42,11 @@ The 5S module uses database records permanently. The loopback preview has a sepa
 | --- | --- | --- | --- | --- |
 | Read project/report data | All | All | Assigned | Assigned |
 | Submit 5S inspections | All | No | Assigned | Assigned |
-| Update action status and add after evidence | All | No | Assigned | Assigned |
-| Change action owner, priority and target | All | No | Assigned | No |
-| Edit weekly progress data | All | No | Assigned | No |
+| Update action status and add after evidence | All | No | No | No |
+| Change action owner, priority and target | All | No | No | No |
+| Edit or delete saved weekly progress data | All | No | No | No |
+| Submit new weekly visits and report snapshots | All | No | Assigned | Assigned |
+| Rename projects | Yes | No | No | No |
 | Create projects | Yes | No | No | No |
 | Manage roles and assignments | Yes | No | No | No |
 | Overwrite/delete submitted inspection | No application endpoint | No | No | No |

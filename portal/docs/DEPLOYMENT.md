@@ -90,3 +90,7 @@ A shared URL grants no role or project membership. For recipients outside the cu
 ## Existing browser data
 
 Export a JSON backup from the original application's home page and restore it in the integrated field workspace as an administrator. The original backup covers spaces/tasks/photos/report snapshots, not the new 5S tables. Historical 5S records and photos are backed up at the database/bucket layer. Keep the original HTML files and the browser backup until the import has been verified.
+
+## Current edit permissions
+
+Only Administrators can rename projects, change or delete saved progress records, and update corrective actions. Assigned Project Managers and Site Supervisors can submit new inspections, site visits, and report snapshots; they cannot overwrite or delete submitted records. Management retains read-only access. Report generation appends a new snapshot. Immutable inspection results and historical evidence retention rules remain in effect for administrators as well.
