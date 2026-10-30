@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1792756800000,
+      "tag": "0000_records",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793342236971,
+      "tag": "0001_site_5s",
+      "breakpoints": true
+    }
+  ]
+}
