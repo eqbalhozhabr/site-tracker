@@ -76,10 +76,10 @@ The current session could read GitHub and refresh Sites credentials. GitHub bran
 2. That person signs in at `/5s`. The server creates an administrator for their stable Site-specific user ID only while there is no administrator. It does not make the first arbitrary visitor an administrator.
 3. The administrator creates/retains projects in the weekly reporting workspace.
 4. Each colleague signs in. Until assigned a role, the access-required page shows their Site-specific user ID. Obtain that ID through a trusted channel.
-5. In **Site 5S & Appearance → Access control**, enter the colleague's verified identity, assign a role and select projects. Management and Administrator have global scope; Project Manager and Site Supervisor require assignments.
+5. In **Site 5S & Appearance → Access control**, enter the colleague's verified identity, assign a role. Every approved user automatically sees all shared projects. Management is read-only; Project Managers and Site Supervisors can submit new records to all shared projects.
 6. The bootstrap runtime variable can be removed after successful initialization; stored user IDs, roles and memberships remain in the database.
 
-To revoke a scoped user's project access, remove their assignments. To remove Management/Administrator access, an administrator must change their role or the owner must remove their platform access. The application prevents self-demotion and guards the final administrator.
+Project assignment checkboxes are no longer used. To revoke a user's application access, remove their supported Site access or change their role as appropriate. To remove Management/Administrator access, an administrator must change their role or the owner must remove their platform access. The application prevents self-demotion and guards the final administrator.
 
 ## WhatsApp links
 
@@ -93,4 +93,8 @@ Export a JSON backup from the original application's home page and restore it in
 
 ## Current edit permissions
 
-Only Administrators can rename projects, change or delete saved progress records, and update corrective actions. Assigned Project Managers and Site Supervisors can submit new inspections, site visits, and report snapshots; they cannot overwrite or delete submitted records. Management retains read-only access. Report generation appends a new snapshot. Immutable inspection results and historical evidence retention rules remain in effect for administrators as well.
+Only Administrators can rename projects, change or delete saved progress records, and update corrective actions. Authorized Project Managers and Site Supervisors can submit new inspections, site visits, and report snapshots; they cannot overwrite or delete submitted records. Management retains read-only access. Report generation appends a new snapshot. Immutable inspection results and historical evidence retention rules remain in effect for administrators as well.
+
+## External visitors
+
+The existing Site supports email-bound external visitor invitations. Preserve the current workspace audience and existing allowlist when inviting an explicitly requested email address through Sites access controls. A Site invitation grants platform viewing access; application roles are granted separately by an Administrator through 5S → More tools → Access control, using the stable user ID shown after the visitor signs in. Use Site Supervisor or Project Manager for new submissions and Management for read-only access. All approved roles use the shared project catalog. A shared URL alone does not grant access.

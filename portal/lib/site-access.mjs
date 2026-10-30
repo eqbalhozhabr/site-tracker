@@ -19,7 +19,7 @@ export async function resolveUser(request,env){
  const memberships=await env.DB.prepare('SELECT project_id FROM project_members WHERE user_id=?').bind(id).all();
  return {...user,projectIds:memberships.results.map(m=>m.project_id)};
 }
-export function canRead(user,projectId){return ['administrator','management'].includes(user.role)||user.projectIds.includes(projectId);}
+export function canRead(user,projectId){return ROLES.includes(user.role)&&identifier(projectId);}
 export function canInspect(user,projectId){return user.role!=='management'&&canRead(user,projectId);}
 export function canEditProgress(user,projectId){return user.role==='administrator';}
 export function assertRead(user,projectId){requireValue(canRead(user,projectId),'You do not have access to this project.',403);}

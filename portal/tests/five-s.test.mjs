@@ -24,14 +24,14 @@ test('anonymous and unassigned users are denied; bootstrap is explicitly configu
  const c=setup();try{assert.equal((await c.handle(c.request('/api/5s/session',{userId:null}))).status,401);assert.equal((await c.handle(c.request('/api/5s/session',{userId:'unknown'}))).status,403);}finally{c.close()}
  const b=createEnvironment({bootstrap:'owner@example.test'});try{const handle=createFiveSHandler(b.env);assert.equal((await handle(b.request('/api/5s/session',{userId:'unknown'}))).status,403);const response=await handle(b.request('/api/5s/session',{userId:'owner'}));assert.equal(response.status,200);assert.equal((await response.json()).user.role,'administrator');}finally{b.close()}
 });
-test('management can read every project, assigned users see only their own projects',async()=>{
- const c=setup();try{for(const [userId,length] of [['admin',2],['management',2],['manager-a',1],['manager-b',1],['supervisor-a',1]]){const response=await c.handle(c.request('/api/5s/session',{userId}));assert.equal((await response.json()).projects.length,length)}assert.equal((await c.handle(c.request('/api/5s/dashboard?projectId=project-b',{userId:'manager-a'}))).status,403);}finally{c.close()}
+test('every authorized role sees all shared projects, independent of legacy memberships',async()=>{
+ const c=setup();try{for(const [userId,length] of [['admin',2],['management',2],['manager-a',2],['manager-b',2],['supervisor-a',2]]){const response=await c.handle(c.request('/api/5s/session',{userId}));assert.equal((await response.json()).projects.length,length)}assert.equal((await c.handle(c.request('/api/5s/dashboard?projectId=project-b',{userId:'manager-a'}))).status,200);}finally{c.close()}
 });
 test('server recomputes scores, ignores claimed inspector role, and preserves immutable inspection results',async()=>{
- const c=setup();try{const response=await submit(c,'supervisor-a',{total:100,classification:'Excellent',inspectorRole:'administrator'});assert.equal(response.status,201);const result=await response.json();assert.equal(result.total,80);assert.equal(result.classification,'Acceptable');const detail=await (await c.handle(c.request('/api/5s/inspections/'+result.id))).json();assert.equal(detail.inspection.inspector_role,'site_supervisor');assert.equal(detail.inspection.inspector_id,'supervisor-a');assert.equal(detail.history.length,1);assert.equal((await c.handle(c.request('/api/5s/inspections/'+result.id,{method:'PATCH',data:{total:0}}))).status,404);assert.equal((await c.handle(c.request('/api/5s/inspections/'+result.id,{userId:'manager-b'}))).status,403);}finally{c.close()}
+ const c=setup();try{const response=await submit(c,'supervisor-a',{total:100,classification:'Excellent',inspectorRole:'administrator'});assert.equal(response.status,201);const result=await response.json();assert.equal(result.total,80);assert.equal(result.classification,'Acceptable');const detail=await (await c.handle(c.request('/api/5s/inspections/'+result.id))).json();assert.equal(detail.inspection.inspector_role,'site_supervisor');assert.equal(detail.inspection.inspector_id,'supervisor-a');assert.equal(detail.history.length,1);assert.equal((await c.handle(c.request('/api/5s/inspections/'+result.id,{method:'PATCH',data:{total:0}}))).status,404);assert.equal((await c.handle(c.request('/api/5s/inspections/'+result.id,{userId:'manager-b'}))).status,200);}finally{c.close()}
 });
-test('management cannot submit; supervisors and managers cannot cross project boundaries',async()=>{
- const c=setup();try{assert.equal((await submit(c,'management')).status,403);assert.equal((await submit(c,'manager-b')).status,403);assert.equal((await submit(c,'supervisor-a',{projectId:'project-b'})).status,403);assert.equal((await submit(c,'manager-a',{date:'2999-01-01'})).status,400);assert.equal((await submit(c,'manager-a',{date:'2026-02-30'})).status,400);assert.equal((await submit(c,'manager-a',{categories:CATEGORIES.map(c=>({...c,score:11}))})).status,400);}finally{c.close()}
+test('management remains read-only; project teams can submit to every existing shared project',async()=>{
+ const c=setup();try{assert.equal((await submit(c,'management')).status,403);assert.equal((await submit(c,'manager-b')).status,201);assert.equal((await submit(c,'supervisor-a',{projectId:'project-b'})).status,201);assert.equal((await submit(c,'manager-a',{date:'2999-01-01'})).status,400);assert.equal((await submit(c,'manager-a',{date:'2026-02-30'})).status,400);assert.equal((await submit(c,'manager-a',{categories:CATEGORIES.map(c=>({...c,score:11}))})).status,400);}finally{c.close()}
 });
 test('critical HSE stays flagged at 100/100 and requires an actionable critical issue',async()=>{
  const c=setup();try{assert.equal((await submit(c,'manager-a',{criticalHse:true,criticalDescription:'Emergency access blocked'})).status,400);const response=await submit(c,'manager-a',{criticalHse:true,criticalDescription:'Emergency access blocked',categories:CATEGORIES.map(c=>({...c,score:10})),issues:[issue({criticalHse:true,priority:'Critical'})]});assert.equal(response.status,201);const result=await response.json();assert.equal(result.total,100);assert.equal(result.classification,'Excellent');assert.equal(result.criticalHse,true);const dashboard=await (await c.handle(c.request('/api/5s/dashboard'))).json();assert.equal(dashboard.summary.criticalOpen,1);}finally{c.close()}
@@ -39,7 +39,7 @@ test('critical HSE stays flagged at 100/100 and requires an actionable critical 
 test('photo uploads validate contents and remain private to authorized projects',async()=>{
  const c=setup();try{
    const photoPath='/api/5s/photos?projectId=project-a&categoryId=hse&kind=before',png=new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,0,1]);
-   assert.equal((await c.handle(c.request(photoPath,{method:'POST',userId:'manager-b',headers:{'Content-Type':'image/png'},bytes:png}))).status,403);
+   assert.equal((await c.handle(c.request(photoPath,{method:'POST',userId:'unknown',headers:{'Content-Type':'image/png'},bytes:png}))).status,403);
    assert.equal((await c.handle(c.request(photoPath,{method:'POST',userId:'manager-a',headers:{'Content-Type':'image/png'},bytes:new Uint8Array(20)}))).status,400);
    assert.equal((await c.handle(c.request(photoPath,{method:'POST',userId:'management',headers:{'Content-Type':'image/png'},bytes:png}))).status,403);
    const photo=await (await c.handle(c.request(photoPath,{method:'POST',userId:'manager-a',headers:{'Content-Type':'image/png'},bytes:png}))).json();
@@ -65,12 +65,12 @@ test('simultaneous action updates cannot overwrite one another or create duplica
  const responses=await Promise.all([c.handle(c.request('/api/5s/actions/'+id,{method:'PATCH',data:{revision:1,status:'In Progress'}})),c.handle(c.request('/api/5s/actions/'+id,{method:'PATCH',data:{revision:1,status:'Closed',closureNotes:'Checked'}}))]);assert.deepEqual(responses.map(r=>r.status).sort(),[200,409]);assert.equal(c.sqlite.prepare("SELECT COUNT(*) AS n FROM inspection_audit WHERE event='action.updated'").get().n,1);
  }finally{c.close()}
 });
-test('legacy API enforces assignments for lists, direct IDs, photos and write operations',async()=>{
+test('legacy API shares project records and photos but still protects saved records from non-admin edits',async()=>{
  const c=setup();try{c.record('tasks',{id:'task-a',spaceId:'project-a',status:'done'});c.record('tasks',{id:'task-b',spaceId:'project-b',status:'done'});c.record('photos',{taskId:'task-b',key:'photos/task-b.json'});await c.env.BUCKET.put('photos/task-b.json',JSON.stringify({taskId:'task-b',dataUrl:'private'}));
- const rows=await (await c.legacy(c.request('/api/data?store=tasks',{userId:'manager-a'}))).json();assert.equal(rows.length,1);assert.equal(rows[0].id,'task-a');
- assert.equal((await c.legacy(c.request('/api/data?store=tasks&id=task-b',{userId:'manager-a'}))).status,403);
- assert.deepEqual(await (await c.legacy(c.request('/api/data?store=photos',{userId:'manager-a'}))).json(),[]);
- assert.equal((await c.legacy(c.request('/api/data?store=photos&id=task-b',{userId:'manager-a'}))).status,403);
+ const rows=await (await c.legacy(c.request('/api/data?store=tasks',{userId:'manager-a'}))).json();assert.equal(rows.length,2);assert.deepEqual(rows.map(r=>r.id).sort(),['task-a','task-b']);
+ assert.equal((await c.legacy(c.request('/api/data?store=tasks&id=task-b',{userId:'manager-a'}))).status,200);
+ assert.equal((await (await c.legacy(c.request('/api/data?store=photos',{userId:'manager-a'}))).json()).length,1);
+ assert.equal((await c.legacy(c.request('/api/data?store=photos&id=task-b',{userId:'manager-a'}))).status,200);
  assert.equal((await c.legacy(c.request('/api/data?store=tasks',{method:'PUT',userId:'management',data:{id:'task-a',spaceId:'project-a',status:'done'}}))).status,403);
  assert.equal((await c.legacy(c.request('/api/data?store=tasks',{method:'PUT',userId:'supervisor-a',data:{id:'task-a',spaceId:'project-a',status:'done'}}))).status,403);
  assert.equal((await c.legacy(c.request('/api/data?store=tasks',{method:'PUT',userId:'manager-a',data:{id:'task-a',spaceId:'project-a',status:'inprogress'}}))).status,403);
@@ -80,17 +80,17 @@ test('legacy API enforces assignments for lists, direct IDs, photos and write op
 test('projects with inspection history cannot be deleted through the legacy API',async()=>{
  const c=setup();try{await submit(c);const response=await c.legacy(c.request('/api/data?store=spaces&id=project-a',{method:'DELETE'}));assert.equal(response.status,409);assert.equal(c.sqlite.prepare('SELECT COUNT(*) AS n FROM inspections').get().n,1);assert.equal(c.sqlite.prepare("SELECT COUNT(*) AS n FROM records WHERE id='project-a'").get().n,1);}finally{c.close()}
 });
-test('exports are scoped, date-filtered and protect against spreadsheet formula injection',async()=>{
+test('exports include shared projects, honor project/date filters and protect against spreadsheet formula injection',async()=>{
  assert.match(toCsv([['=HYPERLINK("x")','@name','-2','normal']]),/'=HYPERLINK/);const c=setup();try{await submit(c,'manager-a',{inspectorName:'=TEST'});await submit(c,'manager-b',{projectId:'project-b'});
- const response=await c.handle(c.request('/api/5s/exports',{userId:'manager-a'})),csv=await response.text();assert.match(csv,/Project A/);assert.doesNotMatch(csv,/Project B/);assert.match(csv,/'=TEST/);
+ const response=await c.handle(c.request('/api/5s/exports',{userId:'manager-a'})),csv=await response.text();assert.match(csv,/Project A/);assert.match(csv,/Project B/);assert.match(csv,/'=TEST/);const oneProject=await (await c.handle(c.request('/api/5s/exports?projectId=project-a',{userId:'manager-a'}))).text();assert.match(oneProject,/Project A/);assert.doesNotMatch(oneProject,/Project B/);
  const filtered=await (await c.handle(c.request('/api/5s/dashboard?from=2026-10-24&to=2026-10-25'))).json();assert.equal(filtered.inspections.length,0);assert.equal((await c.handle(c.request('/api/5s/dashboard?from=2026-11-01&to=2026-10-01'))).status,400);
  }finally{c.close()}
 });
 test('administrators manage assignments; other roles cannot promote themselves',async()=>{
- const c=setup();try{const payload={userId:'new-supervisor',name:'New Supervisor',email:'new@example.test',role:'site_supervisor',projectIds:['project-b']};assert.equal((await c.handle(c.request('/api/5s/access',{method:'POST',userId:'manager-a',data:payload}))).status,403);assert.equal((await c.handle(c.request('/api/5s/access',{method:'POST',data:payload}))).status,200);const session=await (await c.handle(c.request('/api/5s/session',{userId:'new-supervisor'}))).json();assert.equal(session.projects[0].id,'project-b');assert.equal((await c.handle(c.request('/api/5s/access',{method:'POST',data:{...payload,userId:'admin',role:'management'}}))).status,400);}finally{c.close()}
+ const c=setup();try{const payload={userId:'new-supervisor',name:'New Supervisor',email:'new@example.test',role:'site_supervisor',projectIds:['project-b']};assert.equal((await c.handle(c.request('/api/5s/access',{method:'POST',userId:'manager-a',data:payload}))).status,403);assert.equal((await c.handle(c.request('/api/5s/access',{method:'POST',data:payload}))).status,200);const session=await (await c.handle(c.request('/api/5s/session',{userId:'new-supervisor'}))).json();assert.deepEqual(session.projects.map(p=>p.id).sort(),['project-a','project-b']);assert.equal((await c.handle(c.request('/api/5s/access',{method:'POST',data:{...payload,userId:'admin',role:'management'}}))).status,400);}finally{c.close()}
 });
 test('cross-origin mutations and unauthorized CSV reads are rejected',async()=>{
- const c=setup();try{assert.equal((await c.handle(c.request('/api/5s/inspections',{method:'POST',data:inspectionBody(),origin:'https://other.test'}))).status,403);assert.equal((await c.handle(c.request('/api/5s/exports?projectId=project-b',{userId:'manager-a'}))).status,403);assert.equal((await c.legacy(c.request('/api/data?store=spaces',{userId:null}))).status,401);}finally{c.close()}
+ const c=setup();try{assert.equal((await c.handle(c.request('/api/5s/inspections',{method:'POST',data:inspectionBody(),origin:'https://other.test'}))).status,403);assert.equal((await c.handle(c.request('/api/5s/exports?projectId=project-b',{userId:'unknown'}))).status,403);assert.equal((await c.legacy(c.request('/api/data?store=spaces',{userId:null}))).status,401);}finally{c.close()}
 });
 test('after photographs are attached to closure, retained, and cannot be replaced with before evidence',async()=>{
  const c=setup();try{
@@ -145,7 +145,7 @@ test('only administrators rename projects, update saved records and delete; team
    assert.equal((await c.legacy(c.request('/api/data?store=visits',{method:'PUT',userId,data:visit}))).status,200);
    assert.equal((await c.legacy(c.request('/api/data?store=visits',{method:'PUT',userId,data:{...visit,observations:'overwrite'}}))).status,403);
    assert.equal((await c.legacy(c.request('/api/data?store=reportHistory',{method:'PUT',userId,data:{id:'report-'+userId,spaceId:'project-a',html:'New'}}))).status,200);
-   assert.equal((await c.legacy(c.request('/api/data?store=reportHistory',{method:'PUT',userId,data:{id:'other-'+userId,spaceId:'project-b',html:'New'}}))).status,403);
+   assert.equal((await c.legacy(c.request('/api/data?store=reportHistory',{method:'PUT',userId,data:{id:'other-'+userId,spaceId:'project-b',html:'New'}}))).status,200);
   }
   assert.equal((await c.legacy(c.request('/api/data?store=spaces',{method:'PUT',data:{...project,name:'Renamed project'}}))).status,200);
   const renamed=await (await c.legacy(c.request('/api/data?store=spaces&id=project-a'))).json();assert.deepEqual(renamed,{...project,name:'Renamed project'});
@@ -167,5 +167,19 @@ test('all non-admin roles are forbidden from editing corrective actions while ne
   for(const userId of ['manager-a','supervisor-a','management'])assert.equal((await c.handle(c.request('/api/5s/actions/'+action.id,{method:'PATCH',userId,data:{revision:1,status:'Closed',closureNotes:'Unauthorized'}}))).status,403);
   assert.equal(c.sqlite.prepare('SELECT status FROM corrective_actions WHERE id=?').get(action.id).status,'Open');
   assert.equal((await c.handle(c.request('/api/5s/actions/'+action.id,{method:'PATCH',data:{revision:1,status:'Closed',closureNotes:'Admin checked'}}))).status,200);
+ }finally{c.close()}
+});
+
+
+test('authorized users without memberships can use current and future projects while anonymous and unapproved users cannot',async()=>{
+ const c=setup();try{
+  c.user('new-team-member','site_supervisor',[]);
+  const session=await (await c.handle(c.request('/api/5s/session',{userId:'new-team-member'}))).json();assert.equal(session.projects.length,2);
+  c.record('spaces',{id:'new-project',name:'New shared project'});
+  assert.equal((await (await c.handle(c.request('/api/5s/session',{userId:'new-team-member'}))).json()).projects.length,3);
+  assert.equal((await submit(c,'new-team-member',{projectId:'new-project'})).status,201);
+  assert.equal((await c.legacy(c.request('/api/data?store=spaces',{method:'PUT',userId:'new-team-member',data:{id:'unauthorized-project',name:'Not allowed'}}))).status,403);
+  assert.equal((await c.legacy(c.request('/api/data?store=spaces',{userId:null}))).status,401);
+  assert.equal((await c.legacy(c.request('/api/data?store=spaces',{userId:'unapproved'}))).status,403);
  }finally{c.close()}
 });

@@ -40,12 +40,12 @@ The 5S module uses database records permanently. The loopback preview has a sepa
 
 | Operation | Administrator | Management | Project Manager | Site Supervisor |
 | --- | --- | --- | --- | --- |
-| Read project/report data | All | All | Assigned | Assigned |
-| Submit 5S inspections | All | No | Assigned | Assigned |
+| Read project/report data | All | All | All | All |
+| Submit 5S inspections | All | No | All | All |
 | Update action status and add after evidence | All | No | No | No |
 | Change action owner, priority and target | All | No | No | No |
 | Edit or delete saved weekly progress data | All | No | No | No |
-| Submit new weekly visits and report snapshots | All | No | Assigned | Assigned |
+| Submit new weekly visits and report snapshots | All | No | All | All |
 | Rename projects | Yes | No | No | No |
 | Create projects | Yes | No | No | No |
 | Manage roles and assignments | Yes | No | No | No |
@@ -84,3 +84,7 @@ Inspection reports show all scores, comments, critical flags, before/after photo
 - Sites platform sharing is an additional gate. WhatsApp links do not grant access, create users or bypass workspace/external-visitor rules.
 - A platform administrator with direct database/bucket credentials remains able to change infrastructure. The application audit API is append-only; this is not an external tamper-evident ledger.
 - Unsubmitted photo uploads are retained privately; no automatic cleanup deletes evidence. A future operator-reviewed orphan cleanup should exclude all referenced photographs.
+
+## Shared project catalog
+
+All users with an approved application role can read every existing project and its submitted records. Project Managers and Site Supervisors can submit new inspections, visits and report snapshots to any existing project. New projects become available to all approved users automatically. Project membership records are retained for compatibility but no longer restrict visibility. Anonymous and unapproved accounts remain blocked; only administrators can create/rename projects, edit or delete saved records, or grant roles. Unsubmitted 5S evidence remains visible only to its uploader and administrators.
