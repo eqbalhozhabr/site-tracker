@@ -15,6 +15,16 @@ export async function resolveUser(request,env){
    await env.DB.prepare("INSERT OR IGNORE INTO site_users(user_id,email,display_name,role,created_at) SELECT ?,?,?,'administrator',? WHERE NOT EXISTS(SELECT 1 FROM site_users WHERE role='administrator')").bind(id,email,email,new Date().toISOString()).run();
    user=await env.DB.prepare('SELECT * FROM site_users WHERE user_id=?').bind(id).first();
  }
+ // Only the deployment's explicit email allowlist can provision an invited inspector.
+ // Email and user ID are the trusted Sites identity headers, never form input.
+ if(!user&&email){
+   let approved=[];try{const configured=JSON.parse(env.SITE_APPROVED_INSPECTOR_EMAILS||'[]');if(Array.isArray(configured)&&configured.every(value=>typeof value==='string'))approved=configured.map(value=>value.trim().toLowerCase());}catch{}
+   if(approved.includes(email.trim().toLowerCase())){
+     const granted=await env.DB.prepare("INSERT OR IGNORE INTO site_users(user_id,email,display_name,role,created_at) VALUES(?,?,?,'site_supervisor',?)").bind(id,email,email,new Date().toISOString()).run();
+     user=await env.DB.prepare('SELECT * FROM site_users WHERE user_id=?').bind(id).first();
+     if(granted.meta.changes&&user)await audit(env,user,'access.invitation.accepted',id,null,{role:'site_supervisor'}).run();
+   }
+ }
  if(!user)throw new HttpError(403,'Your account has not been assigned a role. Ask an administrator to grant access. Your user ID: '+id);
  const memberships=await env.DB.prepare('SELECT project_id FROM project_members WHERE user_id=?').bind(id).all();
  return {...user,projectIds:memberships.results.map(m=>m.project_id)};

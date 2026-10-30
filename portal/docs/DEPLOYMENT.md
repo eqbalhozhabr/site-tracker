@@ -98,3 +98,7 @@ Only Administrators can rename projects, change or delete saved progress records
 ## External visitors
 
 The existing Site supports email-bound external visitor invitations. Preserve the current workspace audience and existing allowlist when inviting an explicitly requested email address through Sites access controls. A Site invitation grants platform viewing access; application roles are granted separately by an Administrator through 5S → More tools → Access control, using the stable user ID shown after the visitor signs in. Use Site Supervisor or Project Manager for new submissions and Management for read-only access. All approved roles use the shared project catalog. A shared URL alone does not grant access.
+
+## Invited inspector provisioning
+
+`SITE_APPROVED_INSPECTOR_EMAILS` is a production secret containing a JSON array of explicitly approved inspector email addresses. After Sites authenticates a visitor, an exact case-insensitive match against the trusted identity email provisions the previously unknown stable user ID as Site Supervisor. Existing roles are preserved. Other emails remain blocked; malformed configuration fails closed. The role can submit new records but cannot create projects, edit/delete saved data, change actions, or manage users. Adding future visitors requires both their Sites invitation and this runtime allowlist; deploy to apply the runtime change. Remove both access layers when fully revoking an invitation.

@@ -183,3 +183,42 @@ test('authorized users without memberships can use current and future projects w
   assert.equal((await c.legacy(c.request('/api/data?store=spaces',{userId:'unapproved'}))).status,403);
  }finally{c.close()}
 });
+
+test('explicitly invited emails receive only an inspector role and can submit without manual user ID setup',async()=>{
+ const c=setup();try{
+  c.env.SITE_APPROVED_INSPECTOR_EMAILS=JSON.stringify(['invited@example.test']);
+  const headers={'oai-authenticated-user-email':'Invited@Example.Test'};
+  const response=await c.handle(c.request('/api/5s/session',{userId:'invited-id',headers}));assert.equal(response.status,200);
+  const session=await response.json();assert.equal(session.user.role,'site_supervisor');assert.equal(session.projects.length,2);
+  assert.equal((await submit(c,'invited-id')).status,201);
+  assert.equal((await c.legacy(c.request('/api/data?store=spaces',{method:'PUT',userId:'invited-id',data:{id:'project-a',name:'Unauthorized edit'}}))).status,403);
+  assert.equal((await c.legacy(c.request('/api/data?store=spaces&id=project-a',{method:'DELETE',userId:'invited-id'}))).status,403);
+  assert.equal((await c.handle(c.request('/api/5s/access',{userId:'invited-id'}))).status,403);
+  assert.equal((await c.handle(c.request('/api/5s/session',{userId:'not-invited'}))).status,403);
+  assert.equal((await c.handle(c.request('/api/5s/session',{userId:null,headers}))).status,401);
+  assert.equal(c.sqlite.prepare("SELECT COUNT(*) AS n FROM site_users WHERE role='administrator'").get().n,1);
+ }finally{c.close()}
+});
+
+test('invitation provisioning preserves existing roles and is idempotent for simultaneous first visits',async()=>{
+ const c=setup();try{
+  c.env.SITE_APPROVED_INSPECTOR_EMAILS=JSON.stringify(['admin@example.test','management@example.test','invited@example.test']);
+  for(const userId of ['admin','management']){const response=await c.handle(c.request('/api/5s/session',{userId}));assert.equal((await response.json()).user.role,userId==='admin'?'administrator':'management');}
+  const responses=await Promise.all([1,2].map(()=>c.handle(c.request('/api/5s/session',{userId:'invited-id',headers:{'oai-authenticated-user-email':'invited@example.test'}}))));assert.ok(responses.every(r=>r.status===200));
+  assert.equal(c.sqlite.prepare("SELECT COUNT(*) AS n FROM site_users WHERE user_id='invited-id'").get().n,1);
+  assert.equal(c.sqlite.prepare("SELECT COUNT(*) AS n FROM inspection_audit WHERE event='access.invitation.accepted'").get().n,1);
+ }finally{c.close()}
+});
+
+test('invitation provisioning rejects missing/malformed allowlists and never trusts query or request-body emails',async()=>{
+ const c=setup();try{
+  for(const value of [undefined,'invalid json','"invited@example.test"','["invited@example.test",42]','[]']){
+   c.env.SITE_APPROVED_INSPECTOR_EMAILS=value;
+   assert.equal((await c.handle(c.request('/api/5s/session',{userId:'invited-id',headers:{'oai-authenticated-user-email':'invited@example.test'}}))).status,403);
+  }
+  c.env.SITE_APPROVED_INSPECTOR_EMAILS='["invited@example.test"]';
+  assert.equal((await c.handle(c.request('/api/5s/session?email=invited@example.test',{userId:'other-user'}))).status,403);
+  assert.equal((await c.handle(c.request('/api/5s/inspections',{method:'POST',userId:'other-user',data:{...inspectionBody(),email:'invited@example.test'}}))).status,403);
+  assert.equal(c.sqlite.prepare("SELECT COUNT(*) AS n FROM site_users WHERE role='site_supervisor' AND user_id NOT IN ('supervisor-a')").get().n,0);
+ }finally{c.close()}
+});
