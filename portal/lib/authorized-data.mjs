@@ -21,6 +21,7 @@ export function createAuthorizedDataHandler(env){const existing=createDataHandle
  if(key){const incomingProject=await projectFor(key);if(store!=='spaces'){requireValue(identifier(incomingProject),'Parent project/task not found.',404);const parent=await env.DB.prepare("SELECT id FROM records WHERE store='spaces' AND id=?").bind(incomingProject).first();requireValue(parent,'Parent project not found.',404);}requireValue(user.role==='administrator'||!old&&['visits','reportHistory'].includes(store)&&user.role!=='management'&&canRead(user,incomingProject),'Only administrators can edit records. Authorized project teams can submit new visits and reports.',403);}
  else requireValue(record,'Record not found.',404);
  if(store==='spaces'&&request.method==='DELETE'){
+   const weekly=await env.DB.prepare("SELECT id FROM records WHERE store='weeklyReports' AND space_id=? LIMIT 1").bind(recordId).first();requireValue(!weekly,'This project has weekly reports and cannot be deleted. Remove its reports first if appropriate.',409);
    const history=await env.DB.prepare('SELECT id FROM inspections WHERE project_id=? LIMIT 1').bind(recordId).first();requireValue(!history,'This project has inspection history and cannot be deleted. Historical reports must be retained.',409);
  }
  const response=await (user.role==='administrator'?existing:createOnly)(request);if(response.ok)await audit(env,user,'progress.'+request.method.toLowerCase(),recordId,await projectFor(key||record),{collection:store}).run();return response;

@@ -141,3 +141,7 @@ The portable build runs Vinext directly without a host `timeout` command. The ma
 
 - [vinext Documentation](https://github.com/cloudflare/vinext)
 - [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+
+## General weekly reports
+
+Open `/weekly` to create a report for any project stage, including site mobilization. All approved users can submit a subject, free text and optional photo/video files; editing and deletion remain administrator-only. The homepage links to this form, while previous visit/checklist reports remain at `/#reports`. See `docs/DEPLOYMENT.md` for file limits, private storage and backup scope.

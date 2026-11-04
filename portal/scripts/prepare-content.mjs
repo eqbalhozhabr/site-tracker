@@ -23,7 +23,7 @@ function dbPut(store,val){ return dataRequest(store,{method:'PUT',body:JSON.stri
 function dbDelete(store,key){ return dataRequest(store,{method:'DELETE'}, {id:key}); }
 window.addEventListener('unhandledrejection', e => { console.error(e.reason); showToast('Unable to save or load. Check your connection and retry.'); });
 ` + source.slice(end);
-source=source.replace('<body>', '<body><nav class="portal-nav"><a href="/">← Dashboard</a><span>FIELD WORKSPACE</span><a href="/#visits">Visit log</a><a href="/#reports">Weekly Project Reports</a><a href="/5s">Site 5S & Appearance</a></nav>');
+source=source.replace('<body>', '<body><nav class="portal-nav"><a href="/">← Dashboard</a><span>FIELD WORKSPACE</span><a href="/#visits">Visit log</a><a href="/weekly">Weekly Project Reports</a><a href="/5s">Site 5S & Appearance</a></nav>');
 source=source.replace('</style>', '.portal-nav{display:flex;align-items:center;gap:24px;padding:12px 20px;background:#142c30;color:#fff;font-size:12px}.portal-nav a{color:#fff;text-decoration:none}.portal-nav span{flex:1;font-weight:800;letter-spacing:2px}.space-card{border-radius:10px}button{cursor:pointer} </style>');
 source=source.replace("'This browser does not support the storage this app needs. Please use a recent version of Chrome, Safari, Firefox, or Edge.'", "'Online storage is unavailable. Please reload and try again.'");
 source=source.replace('This browser does not support the storage this app needs. Please use a recent version of Chrome, Safari, Firefox, or Edge.','Online storage is unavailable. Please reload and try again.');
@@ -39,3 +39,6 @@ const portalStyles=fs.readFileSync('source/dashboard.html','utf8').match(/<style
 const fiveS=fs.readFileSync('source/five-s.html','utf8').replace('/* __PORTAL_STYLES__ */',portalStyles);
 fs.writeFileSync('content/five-s.ts','export default '+JSON.stringify(appMetadata(fiveS))+';\n');
 fs.writeFileSync('content/five-s-domain.ts','export default '+JSON.stringify(fs.readFileSync('lib/five-s-domain.mjs','utf8'))+';\n');
+
+const weekly=fs.readFileSync('source/weekly.html','utf8').replace('/* __PORTAL_STYLES__ */',portalStyles);
+fs.writeFileSync('content/weekly.ts','export default '+JSON.stringify(appMetadata(weekly))+';\n');

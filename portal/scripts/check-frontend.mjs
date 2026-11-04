@@ -1,7 +1,7 @@
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
-for(const name of ['dashboard','workspace','five-s']){
+for(const name of ['dashboard','workspace','five-s','weekly']){
  const source=JSON.parse(readFileSync('content/'+name+'.ts','utf8').trim().slice('export default '.length,-1));
  let scripts=0;for(const match of source.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)){if(/type="module"/.test(match[1]))new vm.SourceTextModule(match[2]);else new vm.Script(match[2]);scripts++;}
  assert.match(source,/Site 5S & Appearance/);assert.match(source,/<html lang="en"/);console.log(name+': '+scripts+' browser scripts parse successfully; integrated 5S navigation present.');
