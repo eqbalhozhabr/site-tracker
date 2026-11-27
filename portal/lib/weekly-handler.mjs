@@ -1,3 +1,4 @@
+import {projectFamilyIds} from './reporting-domain.mjs';
 import {resolveUser,canRead,assertAdmin,assertOrigin,projectExists,readLimited,json,failure,audit} from './site-access.mjs';
 import {identifier,dateOnly,text,requireValue,HttpError} from './five-s-domain.mjs';
 const REPORTS='weeklyReports',MEDIA='weeklyMedia';
@@ -30,7 +31,9 @@ export function createWeeklyHandler(env){return async request=>{try{
  }
  if(path[0]==='reports'&&path.length===1&&request.method==='GET'){
   const projectId=url.searchParams.get('projectId'),offset=Number(url.searchParams.get('offset')||0);requireValue(Number.isSafeInteger(offset)&&offset>=0&&offset<=1000000,'Invalid report page.');if(projectId)await projectExists(env,projectId);
-  const rows=await env.DB.prepare('SELECT payload FROM records WHERE store=?'+(projectId?' AND space_id=?':'')+' ORDER BY updated_at DESC,id DESC LIMIT 51 OFFSET ?').bind(...(projectId?[REPORTS,projectId,offset]:[REPORTS,offset])).all();
+  const spaces=(await env.DB.prepare("SELECT payload FROM records WHERE store='spaces'").all()).results.map(row=>JSON.parse(row.payload)).filter(p=>canRead(user,p.id));const family=projectId?projectFamilyIds(projectId,spaces):spaces.map(p=>p.id);
+  if(!family.length)return json({items:[],nextOffset:null});
+  const rows=await env.DB.prepare('SELECT payload FROM records WHERE store=? AND space_id IN ('+family.map(()=>'?').join(',')+') ORDER BY updated_at DESC,id DESC LIMIT 51 OFFSET ?').bind(REPORTS,...family,offset).all();
   const items=rows.results.slice(0,50).map(row=>{const r=JSON.parse(row.payload);return {id:r.id,title:r.title,projectId:r.projectId,projectName:r.projectName,reportDate:r.reportDate,stage:r.stage,authorName:r.authorName,createdAt:r.createdAt,preview:r.body.slice(0,180),attachmentCount:r.attachments.length};});return json({items,nextOffset:rows.results.length>50?offset+50:null});
  }
  if(path[0]==='reports'&&path.length===2&&request.method==='GET'){const r=await record(env,REPORTS,path[1]);requireValue(r,'Report not found.',404);requireValue(canRead(user,r.projectId),'Project access is required.',403);return json(await details(env,r));}
