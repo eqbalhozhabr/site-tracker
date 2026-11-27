@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 fs.mkdirSync('content',{recursive:true});
 const accessUi='<style>'+fs.readFileSync('source/access-ui.css','utf8')+'</style><script>'+fs.readFileSync('source/access-ui.js','utf8')+'</script>';
-function appMetadata(html){return html.replace('</head>','<link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#173337"><meta name="apple-mobile-web-app-title" content="Site Tracker"><link rel="apple-touch-icon" href="/icons/site-tracker-192.png"></head>');}
+const reportingDomain='<script>'+fs.readFileSync('lib/reporting-domain.mjs','utf8').replace(/^export /gm,'')+'</script>';
+function appMetadata(html){html=html.replace('<script>',reportingDomain+'<script>');return html.replace('</head>','<link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#173337"><meta name="apple-mobile-web-app-title" content="Site Tracker"><link rel="apple-touch-icon" href="/icons/site-tracker-192.png"></head>');}
 function appendBeforeBodyEnd(html,addition){const index=html.lastIndexOf('</body>');if(index<0)throw new Error('Page closing body was not found.');return html.slice(0,index)+addition+html.slice(index);}
 let source = fs.readFileSync('source/original.html','utf8');
 const start = source.indexOf('/* ================= IndexedDB layer');
@@ -29,6 +30,10 @@ source=source.replace("'This browser does not support the storage this app needs
 source=source.replace('This browser does not support the storage this app needs. Please use a recent version of Chrome, Safari, Firefox, or Edge.','Online storage is unavailable. Please reload and try again.');
 source=source.replace('openDB().then(showHome)', `openDB().then(async () => { const id = new URLSearchParams(location.search).get('space'); if(id) await openSpace(id); else showHome(); })`);
 source=source.replace('const entry = match || { id: uid(),', 'const entry = { id: uid(),');
+source=source.replace("${reportTypeLabel(en.type||'category')}", "${escapeHtml(reportTitle(en))}");
+source=source.replace("type: h.type || 'category',", "type: h.type || 'category', title: h.title, reportTitle: h.reportTitle,");
+source=source.replace("const shortLabel = r.type === 'status' ? 'Detailed status' : r.type === 'timeline' ? 'Timeline' : 'Checklist';", "const shortLabel = reportTitle(r);");
+source=source.replace('${shortLabel}</span>', '${escapeHtml(shortLabel)}</span>');
 // Historical report imports are untrusted HTML. Isolate them while preserving their content.
 source=source.replace("document.getElementById('reportContent').innerHTML = entry.html;", "const frame = document.createElement('iframe'); frame.setAttribute('sandbox',''); frame.title='Saved report'; frame.style.cssText='width:100%;height:75vh;border:0'; frame.srcdoc='<style>body{font:14px Arial;padding:20px}img{max-width:100%}</style>'+entry.html; document.getElementById('reportContent').replaceChildren(frame);");
 fs.writeFileSync('content/workspace.ts','export default '+JSON.stringify(appMetadata(appendBeforeBodyEnd(source,accessUi)))+';\n');
